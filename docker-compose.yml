@@ -1,0 +1,267 @@
+services:
+    langgraph:
+        build: 
+            context: .
+            dockerfile: Dockerfile
+        container_name: langgraph
+        ports:
+            - 8000:8000
+        depends_on:
+            minio:
+                condition: service_healthy
+            db:
+                condition: service_healthy
+            chromadb:
+                condition: service_started
+            llama_cpp_llm:
+                condition: service_healthy
+            llama_cpp_embedding:
+                condition: service_healthy
+            llama_cpp_rerank:
+                condition: service_healthy
+        environment:
+            DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+            LLAMA_CPP_EMBEDDING_ENDPOINT: ${LLAMA_CPP_EMBEDDING_ENDPOINT}
+            LLAMA_CPP_LLM_ENDPOINT: ${LLAMA_CPP_LLM_ENDPOINT}
+            MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+            MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+            LLAMA_CPP_KEY: ${LLAMA_CPP_KEY}
+            LLAMA_CPP_RERANKER_ENDPOINT: ${LLAMA_CPP_RERANKER_ENDPOINT}
+        volumes:
+            - ./langgraph_app:/app
+        command: uvicorn main_app:app --host 0.0.0.0 --port 8000
+        restart: no
+    
+    minio:
+        image: quay.io/minio/minio:latest
+        container_name: minio
+        ports:
+            - "9000:9000"
+            - "9001:9001"
+        environment:
+            MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+        volumes:
+            - minio_data:/data
+        command: server /data --console-address ":9001"
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+        restart: no
+
+    db:
+        image: postgres
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_DB: ${POSTGRES_DB}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            TZ: ${TZ}
+        ports:
+            - 5432:5432
+        volumes:
+            - pg_data:/var/lib/postgresql
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+            interval: 1s
+            timeout: 5s
+            retries: 10
+        restart: no
+
+    chromadb:
+        image: chromadb/chroma:latest
+        container_name: chromadb
+        ports:
+            - 8001:8000
+        environment:
+            ANONYMIZED_TELEMETRY: "FALSE"
+            IS_PERSISTENT: "TRUE"
+            CHROMA_SERVER_HTTP_PORT: "8000"
+        volumes:
+            - chroma_data:/data
+        restart: no
+
+    model_downloader:
+        image: alpine:3.20
+        container_name: model_downloader
+        volumes:
+            - ./models:/models
+        entrypoint: /bin/sh
+        command:
+            - -c
+            - |
+                apk add --no-cache wget
+                urls="
+                https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf
+                https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF/resolve/main/Qwen3-Embedding-4B-Q4_K_M.gguf
+                https://huggingface.co/mradermacher/Qwen3-Reranker-0.6B-GGUF/resolve/main/Qwen3-Reranker-0.6B.Q4_K_M.gguf
+                https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/mmproj-F16.gguf
+                "
+                for url in $$urls
+                do
+                    filename=$$(basename "$$url")
+                    if [ -f "/models/$$filename" ]
+                    then
+                        echo "SKIP (already exists): $$filename"
+                    else
+                        echo "DOWNLOADING: $$filename"
+                        wget -c -q -O "/models/$$filename.tmp" "$$url" && mv "/models/$$filename.tmp" "/models/$$filename"
+                    fi
+                done
+                echo "All models ready"
+
+    llama_cpp_llm:
+        image: ghcr.io/ggml-org/llama.cpp:server-cuda
+        container_name: llama_cpp_llm
+        depends_on:
+            model_downloader:
+                condition: service_completed_successfully
+        ports:
+            - 8080:8080
+        volumes:
+            - ./models:/models
+        environment:
+            LLAMA_CPP_KEY: ${LLAMA_CPP_KEY}
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu]
+        command:
+            - --model
+            - /models/Qwen3.5-4B-Q4_K_M.gguf
+            - --mmproj
+            - /models/mmproj-F16.gguf
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8080"
+            - --n-gpu-layers
+            - "all"
+            - --ctx-size
+            - "10240"
+            - --parallel
+            - "1"
+            - --reasoning-format 
+            - "deepseek"
+            - --reasoning 
+            - "on"
+            - --reasoning-budget 
+            - "4096"
+            - --no-reasoning-preserve
+            - --reasoning-budget-message 
+            - "Time's up, let me answer now."
+            - --api-key
+            - ${LLAMA_CPP_KEY}
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        restart: no
+
+    llama_cpp_embedding:
+        image: ghcr.io/ggml-org/llama.cpp:server-cuda
+        container_name: llama_cpp_embedding
+        depends_on:
+            model_downloader:
+                condition: service_completed_successfully
+        ports:
+            - 8081:8080
+        volumes:
+            - ./models:/models
+        environment:
+            LLAMA_ARG_POOLING: "last"
+            LLAMA_CPP_KEY: ${LLAMA_CPP_KEY}
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu]
+        command:
+            - --model
+            - /models/Qwen3-Embedding-4B-Q4_K_M.gguf
+            - --embeddings
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8080"
+            - --n-gpu-layers
+            - "all"
+            - --ctx-size
+            - "4096"
+            - --ubatch-size
+            - "2048"
+            - --batch-size
+            - "2048"
+            - --parallel
+            - "1"
+            - --api-key
+            - ${LLAMA_CPP_KEY}
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        restart: no
+
+    llama_cpp_rerank:
+        image: ghcr.io/ggml-org/llama.cpp:server-cuda
+        container_name: llama_cpp_rerank
+        depends_on:
+            model_downloader:
+                condition: service_completed_successfully
+        ports:
+            - 8082:8080
+        volumes:
+            - ./models:/models
+        environment:
+            LLAMA_ARG_POOLING: "rank"
+            LLAMA_CPP_KEY: ${LLAMA_CPP_KEY}
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu]
+        command:
+            - --model
+            - /models/Qwen3-Reranker-0.6B.Q4_K_M.gguf
+            - --rerank
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8080"
+            - --n-gpu-layers
+            - "all"
+            - --ctx-size
+            - "4096"
+            - --ubatch-size
+            - "1024"
+            - --batch-size
+            - "1024" 
+            - --parallel
+            - "1"
+            - --api-key
+            - ${LLAMA_CPP_KEY}
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        restart: no
+
+volumes:
+    pg_data:
+    minio_data:
+    chroma_data:
