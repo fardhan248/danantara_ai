@@ -57,6 +57,5 @@ services:
         restart: no
 
 volumes:
-    pg_data:
     minio_data:
     chroma_data:
