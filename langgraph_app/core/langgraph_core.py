@@ -678,7 +678,20 @@ async def fetch_data_api(state: SummaryState):
     }
 
 async def fetch_data_report(state: SummaryState):
-    pass
+    # get documents data from chromadb
+    query = prompts.REPORT_QUERY.format_map({"ticker": state["ticker"], "start_date": state["start_date"], "end_date": state["end_date"]})
+
+    vector_store = await get_vector_store_chroma(state["ticker"])
+    retriever = await get_vector_store_retriever(vector_store, {"type": {"$in": ["text"]}}, k=8)
+
+    results = await retriever.ainvoke(query)
+
+    # Save to cache
+    await save_to_temp(f"report_data_{state['ticker']}_{state['start_date']}_{state['end_date']}", results)
+
+    return {
+        "documents_path": [f"report_data_{state['ticker']}_{state['start_date']}_{state['end_date']}"]
+    }
 
 async def summary_agent(state: SummaryState):
     pass
