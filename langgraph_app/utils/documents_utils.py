@@ -1,5 +1,5 @@
 import uuid, asyncio, re
-from models.openai import llm, embedding
+from langgraph_app.models.gemini import llm, embedding
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from datetime import datetime
