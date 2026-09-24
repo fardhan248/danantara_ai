@@ -10,7 +10,8 @@ from langchain_core.tools import InjectedToolCallId, tool
 from langchain_core.documents import Document
 
 from typing_extensions import Annotated
-import copy, traceback, json, base64
+import copy, traceback, json, base64, pickle
+from redis.asyncio import redis
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
 from core.states import State, LLMOutput, LLMRAG, SummaryState
@@ -620,11 +621,40 @@ async def basic_conclusion(state: State):
         "final_answer": response,
     }
 
+r = redis.Redis(host="redis", port=6379, db=0)
+
+async def save_to_temp(key: str, data) -> str:
+    await r.set(key, pickle.dumps(data), ex=3600)  # expires in 1 hour
+    return key
+
+async def load_from_temp(key: str):
+    data = await r.get(key)
+    if data is not None:
+        return pickle.loads(data)
+    return None
+
 # ===== SUMMARY ===== (per week)
+async def get_table_schema(table_name: str) -> str:
+    query = """
+    SELECT column_name, data_type, is_nullable
+    FROM information_schema.columns
+    WHERE table_name = $1
+    ORDER BY ordinal_position;
+    """
+    async with pool.acquire() as connection:
+        rows = await connection.fetch(query, table_name)
+
+    schema = "\n".join([f"{row['column_name']} ({row['data_type']}, {'nullable' if row['is_nullable'] == 'YES' else 'not nullable'})" for row in rows])
+    return f"{table_name} schema:\n{schema}"
+
 async def fetch_data_api(state: SummaryState):
+    # get table schema for price and finance tables
+    price_schema = await get_table_schema("price_snapshots")
+    finance_schema = await get_table_schema("finance_reports")
+
     # query for generate sql query
-    price_query = prompts.PRICE_QUERY.format_map({"ticker": state["ticker"]})
-    finance_query = prompts.FINANCE_QUERY.format_map({"ticker": state["ticker"]})
+    price_query = prompts.PRICE_QUERY.format_map({"ticker": state["ticker"], "price_schema": price_schema, "start_date": state["start_date"], "end_date": state["end_date"]})
+    finance_query = prompts.FINANCE_QUERY.format_map({"ticker": state["ticker"], "finance_schema": finance_schema, "start_date": state["start_date"], "end_date": state["end_date"]})
 
     # generate sql query
     price_query = await llm.ainvoke([SystemMessage(content=prompts.SQL_SYSTEM_QUERY), HumanMessage(content=price_query)])
@@ -634,17 +664,27 @@ async def fetch_data_api(state: SummaryState):
     finance_query = finance_query.content[0]["text"] if isinstance(finance_query.content, list) else finance_query.content
 
     # Fetch data from API
-    price_data = await pool.fetch_price_data(price_query)
-    finance_data = await pool.fetch_finance_data(finance_query)
-    pass
+    async with pool.acquire() as connection:
+        price_data = await connection.fetch(price_query)
+        finance_data = await connection.fetch(finance_query)
+
+        # Save to cache
+        await save_to_temp(f"price_data_{state['ticker']}_{state['start_date']}_{state['end_date']}", price_data)
+        await save_to_temp(f"finance_data_{state['ticker']}_{state['start_date']}_{state['end_date']}", finance_data)
+
+    return {
+        "price_path": [f"price_data_{state['ticker']}_{state['start_date']}_{state['end_date']}"],
+        "finance_path": [f"finance_data_{state['ticker']}_{state['start_date']}_{state['end_date']}"]
+    }
 
 async def fetch_data_report(state: SummaryState):
     pass
-    
+
 async def summary_agent(state: SummaryState):
     pass
 
 async def human_review(state: SummaryState):
+
     pass
 
 # ===== REPORT =====
