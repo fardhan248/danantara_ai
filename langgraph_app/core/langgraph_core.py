@@ -4,7 +4,7 @@ from transformers import AutoTokenizer
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import ToolMessage, SystemMessage, AIMessage, HumanMessage, BaseMessage
 from langchain_core.messages.utils import trim_messages
-from langgraph.types import Command
+from langgraph.types import Command, interrupt
 from langgraph.prebuilt import InjectedState, ToolNode
 from langchain_core.tools import InjectedToolCallId, tool
 from langchain_core.documents import Document
@@ -714,8 +714,17 @@ async def summary_agent(state: SummaryState):
     }
 
 async def human_review(state: SummaryState):
-    
-    pass
+    decision = interrupt({
+        "question": "Approval diperlukan untuk melanjutkan ke tahap berikutnya. Apakah Anda menyetujui ringkasan ini? (ya/tidak)",
+        "summary": state["summary"],
+    })
+    return {"approved": decision["approved"]}
+
+async def should_repeat_summary(state: SummaryState):
+    if state.get("approved", False):
+        return END
+    else:
+        return "fetch_data_api"
 
 # ===== REPORT =====
 async def report_agent():
@@ -736,7 +745,7 @@ async def get_agent():
     summary_builder.add_edge("fetch_data_api", "fetch_data_report")
     summary_builder.add_edge("fetch_data_report", "summary_agent")
     summary_builder.add_edge("summary_agent", "human_review")
-    summary_builder.add_edge("human_review", END)
+    summary_builder.add_conditional_edges("human_review", should_repeat_summary, ["fetch_data_api", END])
 
     builder = StateGraph(State)
     
