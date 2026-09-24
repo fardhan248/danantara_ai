@@ -694,10 +694,27 @@ async def fetch_data_report(state: SummaryState):
     }
 
 async def summary_agent(state: SummaryState):
-    pass
+    # get data from cache
+    price_data = await load_from_temp(f"price_data_{state['ticker']}_{state['start_date']}_{state['end_date']}")
+    finance_data = await load_from_temp(f"finance_data_{state['ticker']}_{state['start_date']}_{state['end_date']}")
+    documents_data = await load_from_temp(f"report_data_{state['ticker']}_{state['start_date']}_{state['end_date']}")
+
+    # generate summary
+    system_query = prompts.SUMMARY_SYSTEM_QUERY.format_map({
+        "ticker": state["ticker"],
+        "start_date": state["start_date"],
+        "end_date": state["end_date"]
+    })
+
+    response = await llm.ainvoke([SystemMessage(content=system_query), HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}\nDocuments data: {documents_data}")])
+    summary = response.content[0]["text"] if isinstance(response.content, list) else response.content
+
+    return {
+        "summary": summary
+    }
 
 async def human_review(state: SummaryState):
-
+    
     pass
 
 # ===== REPORT =====
