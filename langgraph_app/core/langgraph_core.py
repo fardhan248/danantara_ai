@@ -1,4 +1,4 @@
-from models.openai import llm, llm_thinking
+from langgraph_app.models.gemini import llm, llm_thinking
 from transformers import AutoTokenizer
 
 from langgraph.graph import StateGraph, START, END
@@ -13,12 +13,13 @@ from typing_extensions import Annotated
 import copy, traceback, json, base64
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
-from core.states import State, LLMOutput, LLMRAG
+from core.states import State, LLMOutput, LLMRAG, SummaryState
 from string_utils.prompts import Prompts
 from typing import Union, List
 from typing_extensions import Any
 
 prompts = Prompts()
+pool = None
 
 async def search_for_tables_from_chunks(meta_chunks, vector_store, all_table_ids) -> list[dict[str, Any]]:
     collection = vector_store._collection
@@ -431,6 +432,18 @@ llm_rag = llm.with_structured_output(
     schema=LLMRAG.model_json_schema(), method="json_schema"
 )
 
+async def routing_where(state: State):
+    route = state["routing"]
+
+    if route == "chatbot":
+        return "rag"
+    elif route == "summary":
+        return "summary_agent"
+    else: # report
+        return "report_agent"
+
+# ===== CHATBOT =====
+
 ## RAG (retrieve data from database based on just new query)
 async def rag(state: State):
     print("Node: rag", flush=True)
@@ -607,21 +620,74 @@ async def basic_conclusion(state: State):
         "final_answer": response,
     }
 
+# ===== SUMMARY ===== (per week)
+async def fetch_data_api(state: SummaryState):
+    # query for generate sql query
+    price_query = prompts.PRICE_QUERY.format_map({"ticker": state["ticker"]})
+    finance_query = prompts.FINANCE_QUERY.format_map({"ticker": state["ticker"]})
+
+    # generate sql query
+    price_query = await llm.ainvoke([SystemMessage(content=prompts.SQL_SYSTEM_QUERY), HumanMessage(content=price_query)])
+    finance_query = await llm.ainvoke([SystemMessage(content=prompts.SQL_SYSTEM_QUERY), HumanMessage(content=finance_query)])
+
+    price_query = price_query.content[0]["text"] if isinstance(price_query.content, list) else price_query.content
+    finance_query = finance_query.content[0]["text"] if isinstance(finance_query.content, list) else finance_query.content
+
+    # Fetch data from API
+    price_data = await pool.fetch_price_data(price_query)
+    finance_data = await pool.fetch_finance_data(finance_query)
+    pass
+
+async def fetch_data_report(state: SummaryState):
+    pass
+    
+async def summary_agent(state: SummaryState):
+    pass
+
+async def human_review(state: SummaryState):
+    pass
+
+# ===== REPORT =====
+async def report_agent():
+    pass
+
 
 # Define agent
 async def get_agent():
+    # Summary
+    summary_builder = StateGraph(SummaryState)
+
+    summary_builder.add_node("fetch_data_api", fetch_data_api)
+    summary_builder.add_node("fetch_data_report", fetch_data_report)
+    summary_builder.add_node("summary_agent", summary_agent)
+    summary_builder.add_node("human_review", human_review)
+
+    summary_builder.add_edge(START, "fetch_data_api")
+    summary_builder.add_edge("fetch_data_api", "fetch_data_report")
+    summary_builder.add_edge("fetch_data_report", "summary_agent")
+    summary_builder.add_edge("summary_agent", "human_review")
+    summary_builder.add_edge("human_review", END)
+
     builder = StateGraph(State)
     
     builder.add_node("rag", rag)
     builder.add_node("basic", basic)
     builder.add_node("basic_conclusion", basic_conclusion)
     builder.add_node("tools", tool_node) 
+
+    builder.add_node("summary_agent", summary_agent)
+    builder.add_node("report_agent", report_agent)
     
-    builder.add_edge(START, "rag")
+    builder.add_conditional_edges(START, routing_where, ["rag", "summary_agent", "report_agent"])
+
     builder.add_edge("rag", "basic")
     builder.add_conditional_edges("basic", should_continue, ["basic_conclusion", "tools"])
     builder.add_edge("tools", "basic")
     builder.add_edge("basic_conclusion", END)
+
+    builder.add_edge("summary_agent", "")
+
+    builder.add_edge("report_agent", "")
     
     return builder
     
