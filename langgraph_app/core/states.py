@@ -48,9 +48,7 @@ def items_reducer(current: list, new: dict | list):
 class State(TypedDict):
     thread_id: str 
     # streaming_mode: bool = False
-    bm25: bool
-    rerank: bool
-    enhanced: bool
+    type: str # chat, summary, report
 
     messages: Annotated[list[BaseMessage], add_messages] = [] # list of AnyMessage, Human, AI, Tool, System
     selected_knowledge: Annotated[list[dict[str, Any]], items_reducer] = [] # list of dict: [{"knowledge_id": knowledge_id, "chunk_ids": [id_1, id_2]}]
@@ -65,6 +63,13 @@ class State(TypedDict):
     query: str
     tool_loop: int = 0
     final_answer: dict[str, Any]
+
+class SummaryState(TypedDict):
+    ticker: str
+
+    documents_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    finance_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    price_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
 
 class LLMOutput(BaseModel):
     answer: str
