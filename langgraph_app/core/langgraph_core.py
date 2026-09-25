@@ -19,6 +19,7 @@ from typing import Union, List
 from typing_extensions import Any
 from redis.asyncio import redis
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from datetime import datetime, timedelta
 
 # Utilities
 prompts = Prompts()
@@ -105,13 +106,56 @@ llm_rag = llm.with_structured_output(
 )
 
 ## Tools
+### Get price data from database
+@tool
+async def fetch_price_data(ticker: str, start_date: str, end_date: str) -> List[dict]:
+    """
+    Fetches price data for a given ticker between the specified start and end dates from the database.
+    Returns a list of dictionaries containing the price data.
+
+    If start_date or end_date is not provided, the default is a 1 year range from today.
+    """
+    if not start_date:
+        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+
+    query = prompts.PRICE_QUERY.format_map({"ticker": ticker, "start_date": start_date, "end_date": end_date})
+    
+    async with pool.acquire() as connection:
+        price_data = await connection.fetch(query)
+    
+    return [dict(record) for record in price_data]
+
+## Get finance data from database
+@tool
+async def fetch_finance_data(ticker: str, start_date: str, end_date: str) -> List[dict]:
+    """
+    Fetches finance data for a given ticker between the specified start and end dates from the database.
+    Returns a list of dictionaries containing the finance data.
+
+    If start_date or end_date is not provided, the default is a 1 year range from today.
+    """
+    if not start_date:
+        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+
+    query = prompts.FINANCE_QUERY.format_map({"ticker": ticker, "start_date": start_date, "end_date": end_date})
+    
+    async with pool.acquire() as connection:
+        finance_data = await connection.fetch(query)
+    
+    return [dict(record) for record in finance_data]
+
 llm_thinking_tools = None
 tool_node = None
 
 ### Define Tools node
 async def get_tools_list():
     global llm_thinking_tools, tool_node
-    tools = await get_tools_cache()
+    tools = [fetch_price_data, fetch_finance_data]
+    tools += await get_tools_cache()
 
     llm_thinking_tools = llm_thinking.bind_tools(tools)
     tool_node = ToolNode(tools)
@@ -231,8 +275,8 @@ async def fetch_data_api(state: SummaryState):
     finance_schema = await get_table_schema("finance_reports")
 
     # query for generate sql query
-    price_query = prompts.PRICE_QUERY.format_map({"ticker": state["ticker"], "price_schema": price_schema, "start_date": state["start_date"], "end_date": state["end_date"]})
-    finance_query = prompts.FINANCE_QUERY.format_map({"ticker": state["ticker"], "finance_schema": finance_schema, "start_date": state["start_date"], "end_date": state["end_date"]})
+    price_query = prompts.PRICE_QUERY.format_map({"ticker": state["ticker"], "start_date": state["start_date"], "end_date": state["end_date"]})
+    finance_query = prompts.FINANCE_QUERY.format_map({"ticker": state["ticker"], "start_date": state["start_date"], "end_date": state["end_date"]})
 
     # generate sql query
     price_query = await llm.ainvoke([SystemMessage(content=prompts.SQL_SYSTEM_QUERY), HumanMessage(content=price_query)])
