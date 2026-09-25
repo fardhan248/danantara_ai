@@ -137,11 +137,9 @@ async def routing_where(state: State):
     route = state["routing"]
 
     if route == "chatbot":
-        return "rag"
-    elif route == "summary":
+        return "chatbot_agent"
+    else: # route == "summary"
         return "summary_agent"
-    else: # report
-        return "report_agent"
 
 # ===== CHATBOT =====
 
@@ -331,22 +329,33 @@ async def get_agent():
     summary_builder.add_edge("tools", "summary_agent")
     summary_builder.add_conditional_edges("human_review", should_repeat_summary, ["fetch_data_api", END])
 
+    summary = summary_builder.compile()
+
     # Chatbot
-    builder = StateGraph(State)
+    chatbot_builder = StateGraph(State)
     
-    builder.add_node("rag", rag)
-    builder.add_node("basic", basic)
-    builder.add_node("basic_conclusion", basic_conclusion)
-    builder.add_node("tools", tool_node) 
-    builder.add_node("summary_agent", summary_agent)
+    chatbot_builder.add_node("rag", rag)
+    chatbot_builder.add_node("basic", basic)
+    chatbot_builder.add_node("basic_conclusion", basic_conclusion)
+    chatbot_builder.add_node("tools", tool_node) 
     
-    builder.add_conditional_edges(START, routing_where, ["rag", "summary_agent", "report_agent"])
-    builder.add_edge("rag", "basic")
-    builder.add_conditional_edges("basic", should_continue, ["basic_conclusion", "tools"])
-    builder.add_edge("tools", "basic")
-    builder.add_edge("basic_conclusion", END)
+    chatbot_builder.add_edge("rag", "basic")
+    chatbot_builder.add_conditional_edges("basic", should_continue, ["basic_conclusion", "tools"])
+    chatbot_builder.add_edge("tools", "basic")
+    chatbot_builder.add_edge("basic_conclusion", END)
+
+    chatbot = chatbot_builder.compile()
+
+    # Main
+    main_builder = StateGraph(State)
+    main_builder.add_node("summary_agent", summary)
+    main_builder.add_node("chatbot_agent", chatbot)
     
-    return builder
+    main_builder.add_conditional_edges(START, routing_where, ["chatbot_agent", "summary_agent"])
+    main_builder.add_edge("chatbot_agent", END)
+    main_builder.add_edge("summary_agent", END)
+    
+    return main_builder
     
 async def get_agent_graph():
     builder = await get_agent()
