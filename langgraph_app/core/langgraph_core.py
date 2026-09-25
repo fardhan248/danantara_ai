@@ -20,6 +20,7 @@ from typing_extensions import Any
 from redis.asyncio import redis
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 # Utilities
 prompts = Prompts()
@@ -314,18 +315,31 @@ async def fetch_data_api(state: SummaryState):
     WHERE ticker = $1 AND captured_at BETWEEN $2 AND $3
     """
 
+    wib = ZoneInfo("Asia/Jakarta")
+
+    end_date = datetime.now(wib)
+    start_date = end_date - timedelta(days=7)
+
+    end_date_name = end_date.strftime("%Y_%m_%d")
+    start_date_name = start_date.strftime("%Y_%m_%d")
+
+    end_date = end_date.isoformat()
+    start_date = start_date.isoformat()
+
     # Fetch data from API
     async with pool.acquire() as connection:
-        price_data = await connection.fetch(price_query, state["ticker"], state["start_date"], state["end_date"])
-        finance_data = await connection.fetch(finance_query, state["ticker"], state["start_date"], state["end_date"])
+        price_data = await connection.fetch(price_query, state["ticker"], start_date, end_date)
+        finance_data = await connection.fetch(finance_query, state["ticker"], start_date, end_date)
 
         # Save to cache
-        await save_to_temp(f"price_data_{state['ticker']}_{state['start_date']}_{state['end_date']}", price_data)
-        await save_to_temp(f"finance_data_{state['ticker']}_{state['start_date']}_{state['end_date']}", finance_data)
+        await save_to_temp(f"price_data_{state['ticker']}_{start_date_name}_{end_date_name}", price_data)
+        await save_to_temp(f"finance_data_{state['ticker']}_{start_date_name}_{end_date_name}", finance_data)
 
     return {
-        "price_path": [f"price_data_{state['ticker']}_{state['start_date']}_{state['end_date']}"],
-        "finance_path": [f"finance_data_{state['ticker']}_{state['start_date']}_{state['end_date']}"]
+        "price_path": [f"price_data_{state['ticker']}_{start_date_name}_{end_date_name}"],
+        "finance_path": [f"finance_data_{state['ticker']}_{start_date_name}_{end_date_name}"],
+        "start_date": start_date_name,
+        "end_date": end_date_name,
     }
 
 async def summary_agent(state: SummaryState):
