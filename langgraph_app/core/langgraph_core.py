@@ -68,6 +68,20 @@ async def load_from_temp(key: str):
         return pickle.loads(data)
     return None
 
+## Database schema
+async def get_table_schema(table_name: str) -> str:
+    query = """
+    SELECT column_name, data_type, is_nullable
+    FROM information_schema.columns
+    WHERE table_name = $1
+    ORDER BY ordinal_position;
+    """
+    async with pool.acquire() as connection:
+        rows = await connection.fetch(query, table_name)
+
+    schema = "\n".join([f"{row['column_name']} ({row['data_type']}, {'nullable' if row['is_nullable'] == 'YES' else 'not nullable'})" for row in rows])
+    return f"{table_name} schema:\n{schema}"
+
 ## Trimming messages
 async def trimming_message(messages):
     messages = trim_messages(
@@ -90,11 +104,11 @@ llm_rag = llm.with_structured_output(
     schema=LLMRAG.model_json_schema(), method="json_schema"
 )
 
-# Tools
+## Tools
 llm_thinking_tools = None
 tool_node = None
 
-## Define Tools node
+### Define Tools node
 async def get_tools_list():
     global llm_thinking_tools, tool_node
     tools = await get_tools_cache()
@@ -121,7 +135,7 @@ async def should_continue(state: State):
         
     return "tools"
 
-# Agents
+# Main agents
 async def routing_where(state: State):
     route = state["routing"]
 
@@ -131,7 +145,6 @@ async def routing_where(state: State):
         return "summary_agent"
 
 # ===== CHATBOT =====
-
 ## RAG (retrieve data from database based on just new query)
 async def rag(state: State):
     print("Node: rag", flush=True)
@@ -212,19 +225,6 @@ async def basic_conclusion(state: State):
     }
 
 # ===== SUMMARY ===== (per week)
-async def get_table_schema(table_name: str) -> str:
-    query = """
-    SELECT column_name, data_type, is_nullable
-    FROM information_schema.columns
-    WHERE table_name = $1
-    ORDER BY ordinal_position;
-    """
-    async with pool.acquire() as connection:
-        rows = await connection.fetch(query, table_name)
-
-    schema = "\n".join([f"{row['column_name']} ({row['data_type']}, {'nullable' if row['is_nullable'] == 'YES' else 'not nullable'})" for row in rows])
-    return f"{table_name} schema:\n{schema}"
-
 async def fetch_data_api(state: SummaryState):
     # get table schema for price and finance tables
     price_schema = await get_table_schema("price_snapshots")
