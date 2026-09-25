@@ -36,6 +36,13 @@ mcp_clients = MultiServerMCPClient({
         "command": "python",
         "args": ["-m", "mcp_server_calculator"],
     },
+    "datetime": {
+        "command": "uvx",
+        "args": ["takanarishimbo-datetime-mcp-server"],
+        "env": {
+            "TIMEZONE": "Asia/Jakarta",
+        }
+    }
 })
 
 ALLOWED_TOOLS = {
@@ -46,6 +53,7 @@ ALLOWED_TOOLS = {
     "fetch-suspensions",
     "fetch-broker-summary-top",
     "calculate",
+    "get_current_time",
 }
 
 _tools_cache = None
