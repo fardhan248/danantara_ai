@@ -26,11 +26,15 @@ prompts = Prompts()
 pool = None
 
 ## MCP
-sectors_client = MultiServerMCPClient({
+mcp_clients = MultiServerMCPClient({
     "sectors": {
         "transport": "streamable_http",
         "url": "https://sectors-mcp.supertype.ai/mcp",
         "headers": {"Authorization": f"Bearer {os.getenv('SECTORS_API_KEY')}"},
+    },
+    "calculator": {
+        "command": "python",
+        "args": ["-m", "mcp_server_calculator"],
     },
 })
 
@@ -41,12 +45,13 @@ ALLOWED_TOOLS = {
     "fetch-fillings",
     "fetch-suspensions",
     "fetch-broker-summary-top",
+    "calculate",
 }
 
 _tools_cache = None
 
 async def get_filtered_tools():
-    all_tools = await sectors_client.get_tools()
+    all_tools = await mcp_clients.get_tools()
     filtered_tools = [tool for tool in all_tools if tool.name in ALLOWED_TOOLS]
     return filtered_tools
 
