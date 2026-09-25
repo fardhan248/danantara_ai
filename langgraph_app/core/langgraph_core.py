@@ -39,11 +39,18 @@ ALLOWED_TOOLS = {
 
 prompts = Prompts()
 pool = None
+_tools_cache = None
 
 async def get_filtered_tools():
     all_tools = await sectors_client.get_tools()
     filtered_tools = [tool for tool in all_tools if tool["name"] in ALLOWED_TOOLS]
     return filtered_tools
+
+async def get_tools_cache():
+    global _tools_cache
+    if _tools_cache is None:
+        _tools_cache = await get_filtered_tools()
+    return _tools_cache
 
 async def search_for_tables_from_chunks(meta_chunks, vector_store, all_table_ids) -> list[dict[str, Any]]:
     collection = vector_store._collection
