@@ -287,35 +287,29 @@ async def basic(state: State):
 async def basic_conclusion(state: State):
     print("Node: basic_conclusion", flush=True)
 
-    results = await get_contexts_from_current_state(
-        state.get("chunk_knowledge", []),
-        state.get("tables", []),
-        state.get("image_in_table", []),
-        state.get("image_out_table", [])
-    )
-    reformat_chunk_knowledge, reformat_tables, reformat_image_in_table, reformat_image_out_table = results
-    
-    system_query = prompts.BASIC_CONCLUSION_SYSTEM_QUERY.format_map({
-        "knowledges": reformat_chunk_knowledge,
-        "images_in_table_descriptions": reformat_image_in_table,
-        "images_out_table_descriptions": reformat_image_out_table,
-        "tables": reformat_tables,
+    # Get data from state
+    price_data = [await load_from_temp(key) for key in state["price_path"]]
+    finance_data = [await load_from_temp(key) for key in state["finance_path"]]
+
+    system_query = prompts.BASIC_SYSTEM_QUERY.format_map({
+        "prices_data": price_data,
+        "finance_data": finance_data,
     })   
 
     messages = state["messages"]
-    
+
     final_query = [
         SystemMessage(content=system_query),
         *messages,
         HumanMessage(content=f"User's query: {state['query']}"),
     ]
-    print("token system (conclusion):", count_tokens([SystemMessage(content=system_query)]), flush=True)
 
     final_query = await trimming_message(final_query)
+
     response = await llm_output.ainvoke(final_query)
 
     if not isinstance(response, dict):
-        response = {"answer": response.content, "sources": []}
+        response = {"answer": response.content[0]["text"], "sources": []}
 
     print("Berhasil lewat basic_conclusion", flush=True)
     return {
