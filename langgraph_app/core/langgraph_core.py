@@ -100,10 +100,6 @@ llm_output = llm.with_structured_output(
     schema=LLMOutput.model_json_schema(), method="json_schema"
 )
 
-llm_rag = llm.with_structured_output(
-    schema=LLMRAG.model_json_schema(), method="json_schema"
-)
-
 ## Tools
 ### Get price data from database
 @tool
