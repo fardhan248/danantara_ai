@@ -315,11 +315,6 @@ async def should_repeat_summary(state: SummaryState):
     else:
         return "fetch_data_api"
 
-# ===== REPORT =====
-async def report_agent():
-    pass
-
-
 # Define agent
 async def get_agent():
     # Summary
@@ -336,26 +331,20 @@ async def get_agent():
     summary_builder.add_edge("tools", "summary_agent")
     summary_builder.add_conditional_edges("human_review", should_repeat_summary, ["fetch_data_api", END])
 
+    # Chatbot
     builder = StateGraph(State)
     
     builder.add_node("rag", rag)
     builder.add_node("basic", basic)
     builder.add_node("basic_conclusion", basic_conclusion)
     builder.add_node("tools", tool_node) 
-
     builder.add_node("summary_agent", summary_agent)
-    builder.add_node("report_agent", report_agent)
     
     builder.add_conditional_edges(START, routing_where, ["rag", "summary_agent", "report_agent"])
-
     builder.add_edge("rag", "basic")
     builder.add_conditional_edges("basic", should_continue, ["basic_conclusion", "tools"])
     builder.add_edge("tools", "basic")
     builder.add_edge("basic_conclusion", END)
-
-    builder.add_edge("summary_agent", "")
-
-    builder.add_edge("report_agent", "")
     
     return builder
     
