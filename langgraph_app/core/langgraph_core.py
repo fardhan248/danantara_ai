@@ -41,15 +41,15 @@ prompts = Prompts()
 pool = None
 _tools_cache = None
 
-async def get_filtered_tools():
-    all_tools = await sectors_client.get_tools()
+def get_filtered_tools():
+    all_tools = sectors_client.get_tools()
     filtered_tools = [tool for tool in all_tools if tool["name"] in ALLOWED_TOOLS]
     return filtered_tools
 
-async def get_tools_cache():
+def get_tools_cache():
     global _tools_cache
     if _tools_cache is None:
-        _tools_cache = await get_filtered_tools()
+        _tools_cache = get_filtered_tools()
     return _tools_cache
 
 async def search_for_tables_from_chunks(meta_chunks, vector_store, all_table_ids) -> list[dict[str, Any]]:
@@ -385,8 +385,9 @@ async def fetch_new_knowledge(
 
 ## Define Tools node
 tools = [fetch_new_knowledge]
+tools += get_tools_cache()
 
-llm_tools = llm_thinking.bind_tools(tools)
+llm_thinking_tools = llm_thinking.bind_tools(tools)
 
 tool_node = ToolNode(tools)
     
@@ -462,6 +463,8 @@ llm_output = llm.with_structured_output(
 llm_rag = llm.with_structured_output(
     schema=LLMRAG.model_json_schema(), method="json_schema"
 )
+
+llm_thinking_tools = llm_thinking.bind_tools(tools)
 
 async def routing_where(state: State):
     route = state["routing"]
@@ -607,7 +610,7 @@ async def basic(state: State):
     print("token system basic:", count_tokens([SystemMessage(content=system_query)]), flush=True)
 
     final_query = await trimming_message(final_query)
-    response = await llm_tools.ainvoke(final_query)
+    response = await llm_thinking_tools.ainvoke(final_query)
 
     print("Berhasil lewat basic", flush=True)
     return {"messages": [response], "tool_loop": state.get("tool_loop", 0) + 1}
@@ -711,7 +714,6 @@ async def summary_agent(state: SummaryState):
     # get data from cache
     price_data = await load_from_temp(f"price_data_{state['ticker']}_{state['start_date']}_{state['end_date']}")
     finance_data = await load_from_temp(f"finance_data_{state['ticker']}_{state['start_date']}_{state['end_date']}")
-    documents_data = await load_from_temp(f"report_data_{state['ticker']}_{state['start_date']}_{state['end_date']}")
 
     # generate summary
     system_query = prompts.SUMMARY_SYSTEM_QUERY.format_map({
@@ -720,12 +722,28 @@ async def summary_agent(state: SummaryState):
         "end_date": state["end_date"]
     })
 
-    response = await llm.ainvoke([SystemMessage(content=system_query), HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}\nDocuments data: {documents_data}")])
+    response = await llm_thinking_tools.ainvoke([SystemMessage(content=system_query), HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}")])
     summary = response.content[0]["text"] if isinstance(response.content, list) else response.content
 
     return {
         "summary": summary
     }
+
+async def should_continue_summary(state: State):
+    print("Should continue_summary?", flush=True)
+    messages = state["messages"]
+    
+    tool_calls = getattr(messages[-1], "tool_calls", [])
+    
+    if len(tool_calls) == 0:
+        print("human_review", flush=True)
+        return "human_review"
+
+    if state["tool_loop"] > 3:
+        print("human_review", flush=True)
+        return "human_review"
+        
+    return "tools"
 
 async def human_review(state: SummaryState):
     decision = interrupt({
@@ -751,14 +769,14 @@ async def get_agent():
     summary_builder = StateGraph(SummaryState)
 
     summary_builder.add_node("fetch_data_api", fetch_data_api)
-    summary_builder.add_node("fetch_data_report", fetch_data_report)
     summary_builder.add_node("summary_agent", summary_agent)
     summary_builder.add_node("human_review", human_review)
+    summary_builder.add_node("tools", tool_node)
 
     summary_builder.add_edge(START, "fetch_data_api")
-    summary_builder.add_edge("fetch_data_api", "fetch_data_report")
-    summary_builder.add_edge("fetch_data_report", "summary_agent")
-    summary_builder.add_edge("summary_agent", "human_review")
+    summary_builder.add_edge("fetch_data_api", "summary_agent")
+    summary_builder.add_conditional_edges("summary_agent", should_continue_summary, ["human_review", "tools"])
+    summary_builder.add_edge("tools", "summary_agent")
     summary_builder.add_conditional_edges("human_review", should_repeat_summary, ["fetch_data_api", END])
 
     builder = StateGraph(State)
