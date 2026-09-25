@@ -10,17 +10,40 @@ from langchain_core.tools import InjectedToolCallId, tool
 from langchain_core.documents import Document
 
 from typing_extensions import Annotated
-import copy, traceback, json, base64, pickle
-from redis.asyncio import redis
+import copy, traceback, json, base64, pickle, os
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
 from core.states import State, LLMOutput, LLMRAG, SummaryState
 from string_utils.prompts import Prompts
 from typing import Union, List
 from typing_extensions import Any
+from redis.asyncio import redis
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+sectors_client = MultiServerMCPClient({
+    "sectors": {
+        "transport": "streamable_http",
+        "url": "https://sectors-mcp.supertype.ai/mcp",
+        "header": {"Authorization": f"Bearer {os.getenv('SECTORS_API_KEY')}"},
+    },
+})
+
+ALLOWED_TOOLS = {
+    "fetch-corporate-actions",
+    "fetch-foreign-flow",
+    "fetch-news",
+    "fetch-fillings",
+    "fetch-suspensions",
+    "fetch-broker-summary-top",
+}
 
 prompts = Prompts()
 pool = None
+
+async def get_filtered_tools():
+    all_tools = await sectors_client.get_tools()
+    filtered_tools = [tool for tool in all_tools if tool["name"] in ALLOWED_TOOLS]
+    return filtered_tools
 
 async def search_for_tables_from_chunks(meta_chunks, vector_store, all_table_ids) -> list[dict[str, Any]]:
     collection = vector_store._collection
