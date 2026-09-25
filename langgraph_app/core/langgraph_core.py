@@ -344,8 +344,8 @@ async def fetch_data_api(state: SummaryState):
 
 async def summary_agent(state: SummaryState):
     # get data from cache
-    price_data = await load_from_temp(f"price_data_{state['ticker']}_{state['start_date']}_{state['end_date']}")
-    finance_data = await load_from_temp(f"finance_data_{state['ticker']}_{state['start_date']}_{state['end_date']}")
+    price_data = [await load_from_temp(path) for path in state["price_path"]]
+    finance_data = [await load_from_temp(path) for path in state["finance_path"]]
 
     # generate summary
     system_query = prompts.SUMMARY_SYSTEM_QUERY.format_map({
