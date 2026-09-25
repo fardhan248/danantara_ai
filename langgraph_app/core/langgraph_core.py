@@ -108,10 +108,10 @@ llm_rag = llm.with_structured_output(
 ## Tools
 ### Get price data from database
 @tool
-async def fetch_price_data(ticker: str, start_date: str, end_date: str) -> List[dict]:
+async def fetch_price_data(ticker: str, start_date: str, end_date: str) -> str:
     """
     Fetches price data for a given ticker between the specified start and end dates from the database.
-    Returns a list of dictionaries containing the price data.
+    Returns a list of dictionaries containing the price data (ticker, price, volume, captured_at).
 
     If start_date or end_date is not provided, the default is a 1 year range from today.
     """
@@ -120,19 +120,26 @@ async def fetch_price_data(ticker: str, start_date: str, end_date: str) -> List[
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
 
-    query = prompts.PRICE_QUERY.format_map({"ticker": ticker, "start_date": start_date, "end_date": end_date})
+    query = """
+    SELECT ticker, price, volume, captured_at
+    FROM price_snapshots
+    WHERE ticker = $1 AND captured_at BETWEEN $2 AND $3"""
     
     async with pool.acquire() as connection:
-        price_data = await connection.fetch(query)
+        price_data = await connection.fetch(query, ticker, start_date, end_date)
+        price_data = [dict(record) for record in price_data]
+
+        # Save to cache
+        await save_to_temp(f"price_data_{ticker}_{start_date}_{end_date}", price_data)
     
-    return [dict(record) for record in price_data]
+    return "Success"
 
 ## Get finance data from database
 @tool
-async def fetch_finance_data(ticker: str, start_date: str, end_date: str) -> List[dict]:
+async def fetch_finance_data(ticker: str, start_date: str, end_date: str) -> str:
     """
     Fetches finance data for a given ticker between the specified start and end dates from the database.
-    Returns a list of dictionaries containing the finance data.
+    Returns a list of dictionaries containing the finance data (ticker, revenue, net_income, total_assets, total_liabilities, roe, roa, yoy, qoq).
 
     If start_date or end_date is not provided, the default is a 1 year range from today.
     """
@@ -141,21 +148,31 @@ async def fetch_finance_data(ticker: str, start_date: str, end_date: str) -> Lis
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
 
-    query = prompts.FINANCE_QUERY.format_map({"ticker": ticker, "start_date": start_date, "end_date": end_date})
-    
+    query = """
+    SELECT ticker, revenue, net_income, total_assets, total_liabilities, roe, roa, yoy, qoq
+    FROM finance_reports
+    WHERE ticker = $1 AND captured_at BETWEEN $2 AND $3"""
+
     async with pool.acquire() as connection:
-        finance_data = await connection.fetch(query)
-    
-    return [dict(record) for record in finance_data]
+        finance_data = await connection.fetch(query, ticker, start_date, end_date)
+        finance_data = [dict(record) for record in finance_data]
+
+        # Save to cache
+        await save_to_temp(f"finance_data_{ticker}_{start_date}_{end_date}", finance_data)
+
+    return "Success"
 
 llm_thinking_tools = None
+llm_thinking_tools_summary = None
 tool_node = None
 
 ### Define Tools node
 async def get_tools_list():
-    global llm_thinking_tools, tool_node
-    tools = [fetch_price_data, fetch_finance_data]
-    tools += await get_tools_cache()
+    global llm_thinking_tools, llm_thinking_tools_summary, tool_node
+    tools = await get_tools_cache()
+    llm_thinking_tools_summary = llm_thinking.bind_tools(tools)
+
+    tools += [fetch_price_data, fetch_finance_data]
 
     llm_thinking_tools = llm_thinking.bind_tools(tools)
     tool_node = ToolNode(tools)
@@ -270,25 +287,23 @@ async def basic_conclusion(state: State):
 
 # ===== SUMMARY ===== (per week)
 async def fetch_data_api(state: SummaryState):
-    # get table schema for price and finance tables
-    price_schema = await get_table_schema("price_snapshots")
-    finance_schema = await get_table_schema("finance_reports")
+    # sql queries to fetch data from database
+    price_query = """
+    SELECT ticker, price, volume, captured_at
+    FROM price_snapshots
+    WHERE ticker = $1 AND captured_at BETWEEN $2 AND $3
+    """
 
-    # query for generate sql query
-    price_query = prompts.PRICE_QUERY.format_map({"ticker": state["ticker"], "start_date": state["start_date"], "end_date": state["end_date"]})
-    finance_query = prompts.FINANCE_QUERY.format_map({"ticker": state["ticker"], "start_date": state["start_date"], "end_date": state["end_date"]})
-
-    # generate sql query
-    price_query = await llm.ainvoke([SystemMessage(content=prompts.SQL_SYSTEM_QUERY), HumanMessage(content=price_query)])
-    finance_query = await llm.ainvoke([SystemMessage(content=prompts.SQL_SYSTEM_QUERY), HumanMessage(content=finance_query)])
-
-    price_query = price_query.content[0]["text"] if isinstance(price_query.content, list) else price_query.content
-    finance_query = finance_query.content[0]["text"] if isinstance(finance_query.content, list) else finance_query.content
+    finance_query = """
+    SELECT ticker, revenue, net_income, total_assets, total_liabilities, roe, roa
+    FROM finance_reports
+    WHERE ticker = $1 AND captured_at BETWEEN $2 AND $3
+    """
 
     # Fetch data from API
     async with pool.acquire() as connection:
-        price_data = await connection.fetch(price_query)
-        finance_data = await connection.fetch(finance_query)
+        price_data = await connection.fetch(price_query, state["ticker"], state["start_date"], state["end_date"])
+        finance_data = await connection.fetch(finance_query, state["ticker"], state["start_date"], state["end_date"])
 
         # Save to cache
         await save_to_temp(f"price_data_{state['ticker']}_{state['start_date']}_{state['end_date']}", price_data)
@@ -311,7 +326,7 @@ async def summary_agent(state: SummaryState):
         "end_date": state["end_date"]
     })
 
-    response = await llm_thinking_tools.ainvoke([SystemMessage(content=system_query), HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}")])
+    response = await llm_thinking_tools_summary.ainvoke([SystemMessage(content=system_query), HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}")])
     summary = response.content[0]["text"] if isinstance(response.content, list) else response.content
 
     return {
