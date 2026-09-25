@@ -347,19 +347,53 @@ async def summary_agent(state: SummaryState):
     price_data = [await load_from_temp(path) for path in state["price_path"]]
     finance_data = [await load_from_temp(path) for path in state["finance_path"]]
 
-    # generate summary
     system_query = prompts.SUMMARY_SYSTEM_QUERY.format_map({
         "ticker": state["ticker"],
         "start_date": state["start_date"],
         "end_date": state["end_date"]
     })
 
-    response = await llm_thinking_tools_summary.ainvoke([SystemMessage(content=system_query), HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}")])
+    messages = state.get("messages", [])
+
+    final_query = [
+        SystemMessage(content=system_query), 
+        *messages,
+        HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}")
+    ]
+
+    response = await llm_thinking_tools_summary.ainvoke(final_query)
+
+    return {
+        "messages": [response],
+        "tool_loop": state.get("tool_loop", 0) + 1,
+    }
+
+async def summary_final(state: SummaryState):
+    # get data from cache
+    price_data = [await load_from_temp(path) for path in state["price_path"]]
+    finance_data = [await load_from_temp(path) for path in state["finance_path"]]
+
+    # generate summary
+    system_query = prompts.SUMMARY_SYSTEM_QUERY_FINAL.format_map({
+        "ticker": state["ticker"],
+        "start_date": state["start_date"],
+        "end_date": state["end_date"]
+    })
+
+    messages = state["messages"]
+
+    final_query = [
+        SystemMessage(content=system_query),
+        *messages,
+        HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}")
+    ]
+
+    response = await llm.ainvoke(final_query)
     summary = response.content[0]["text"] if isinstance(response.content, list) else response.content
 
     return {
+        "messages": [response],
         "summary": summary,
-        "tool_loop": state.get("tool_loop", 0) + 1,
     }
 
 async def should_continue_summary(state: State):
@@ -389,7 +423,7 @@ async def should_repeat_summary(state: SummaryState):
     if state.get("approved", False):
         return END
     else:
-        return "fetch_data_api"
+        return "summary_agent"
 
 # Define agent
 async def get_agent():
@@ -398,6 +432,7 @@ async def get_agent():
 
     summary_builder.add_node("fetch_data_api", fetch_data_api)
     summary_builder.add_node("summary_agent", summary_agent)
+    summary_builder.add_node("summary_final", summary_final)
     summary_builder.add_node("human_review", human_review)
     summary_builder.add_node("tools", tool_node)
 
@@ -405,7 +440,8 @@ async def get_agent():
     summary_builder.add_edge("fetch_data_api", "summary_agent")
     summary_builder.add_conditional_edges("summary_agent", should_continue_summary, ["human_review", "tools"])
     summary_builder.add_edge("tools", "summary_agent")
-    summary_builder.add_conditional_edges("human_review", should_repeat_summary, ["fetch_data_api", END])
+    summary_builder.add_edge("summary_agent", "summary_final")
+    summary_builder.add_conditional_edges("human_review", should_repeat_summary, ["summary_agent", END])
 
     summary = summary_builder.compile()
 
