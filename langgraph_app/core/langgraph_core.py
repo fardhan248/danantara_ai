@@ -206,10 +206,6 @@ async def routing_where(state: State):
         return "summary_agent"
 
 # ===== CHATBOT =====
-## RAG (retrieve data from database based on just new query)
-async def rag(state: State):
-    print("Node: rag", flush=True)
-
 ## Agent: Basic 
 async def basic(state: State):
     print("Node: basic", flush=True)
@@ -383,12 +379,11 @@ async def get_agent():
     # Chatbot
     chatbot_builder = StateGraph(State)
     
-    chatbot_builder.add_node("rag", rag)
     chatbot_builder.add_node("basic", basic)
     chatbot_builder.add_node("basic_conclusion", basic_conclusion)
     chatbot_builder.add_node("tools", tool_node) 
     
-    chatbot_builder.add_edge("rag", "basic")
+    chatbot_builder.add_edge(START, "basic")
     chatbot_builder.add_conditional_edges("basic", should_continue, ["basic_conclusion", "tools"])
     chatbot_builder.add_edge("tools", "basic")
     chatbot_builder.add_edge("basic_conclusion", END)
