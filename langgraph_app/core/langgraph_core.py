@@ -121,7 +121,12 @@ llm_rag = llm.with_structured_output(
 ## Tools
 ### Get price data from database
 @tool
-async def fetch_price_data(ticker: str, start_date: str, end_date: str) -> str:
+async def fetch_price_data(
+    ticker: str, 
+    start_date: str, 
+    end_date: str,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
     """
     Fetches price data for a given ticker between the specified start and end dates from the database.
     Returns a list of dictionaries containing the price data (ticker, price, volume, captured_at).
@@ -143,13 +148,32 @@ async def fetch_price_data(ticker: str, start_date: str, end_date: str) -> str:
         price_data = [dict(record) for record in price_data]
 
         # Save to cache
-        await save_to_temp(f"price_data_{ticker}_{start_date}_{end_date}", price_data)
+        name = f"price_data_{ticker}_{start_date}_{end_date}"
+        await save_to_temp(name, price_data)
     
-    return "Success"
+    return Command(
+        update={
+            "messages": [
+                ToolMessage(
+                    content="Success fetch data from price data table",
+                    tool_call_id=tool_call_id,
+                    name="fetch_price_data",
+                )
+            ],
+            "price_path": {
+                "append": [name],
+            }
+        }
+    )
 
 ## Get finance data from database
 @tool
-async def fetch_finance_data(ticker: str, start_date: str, end_date: str) -> str:
+async def fetch_finance_data(
+    ticker: str, 
+    start_date: str, 
+    end_date: str,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
     """
     Fetches finance data for a given ticker between the specified start and end dates from the database.
     Returns a list of dictionaries containing the finance data (ticker, revenue, net_income, total_assets, total_liabilities, roe, roa, yoy, qoq).
@@ -171,9 +195,23 @@ async def fetch_finance_data(ticker: str, start_date: str, end_date: str) -> str
         finance_data = [dict(record) for record in finance_data]
 
         # Save to cache
-        await save_to_temp(f"finance_data_{ticker}_{start_date}_{end_date}", finance_data)
+        name = f"finance_data_{ticker}_{start_date}_{end_date}"
+        await save_to_temp(name, finance_data)
 
-    return "Success"
+    return Command(
+        update={
+            "messages": [
+                ToolMessage(
+                    content="Success fetch data from finance data table",
+                    tool_call_id=tool_call_id,
+                    name="fetch_finance_data",
+                )
+            ],
+            "finance_path": {
+                "append": [name],
+            }
+        }
+    )
 
 llm_thinking_tools = None
 llm_thinking_tools_summary = None
