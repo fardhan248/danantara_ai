@@ -241,7 +241,7 @@ async def should_continue(state: State):
         print("basic_conclusion", flush=True)
         return "basic_conclusion"
 
-    if state["tool_loop"] > 3:
+    if state["tool_loop"] > 5:
         print("basic_conclusion", flush=True)
         return "basic_conclusion"
         
@@ -362,7 +362,8 @@ async def summary_agent(state: SummaryState):
     summary = response.content[0]["text"] if isinstance(response.content, list) else response.content
 
     return {
-        "summary": summary
+        "summary": summary,
+        "tool_loop": state.get("tool_loop", 0) + 1,
     }
 
 async def should_continue_summary(state: State):
@@ -375,7 +376,7 @@ async def should_continue_summary(state: State):
         print("human_review", flush=True)
         return "human_review"
 
-    if state["tool_loop"] > 3:
+    if state["tool_loop"] > 5:
         print("human_review", flush=True)
         return "human_review"
         
