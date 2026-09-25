@@ -19,6 +19,7 @@ services:
             MINIO_ROOT_USER: ${MINIO_ROOT_USER}
             MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
             MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+            SECTORS_API_KEY: ${SECTORS_API_KEY}
         volumes:
             - ./langgraph_app:/app
         command: uvicorn main_app:app --host 0.0.0.0 --port 8000
