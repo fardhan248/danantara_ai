@@ -10,7 +10,7 @@ from langchain_core.tools import InjectedToolCallId, tool
 from langchain_core.documents import Document
 
 from typing_extensions import Annotated
-import copy, traceback, json, base64, pickle, os
+import copy, traceback, json, base64, pickle, os, asyncio
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
 from core.states import State, LLMOutput, LLMRAG, SummaryState
@@ -29,7 +29,7 @@ sectors_client = MultiServerMCPClient({
     "sectors": {
         "transport": "streamable_http",
         "url": "https://sectors-mcp.supertype.ai/mcp",
-        "header": {"Authorization": f"Bearer {os.getenv('SECTORS_API_KEY')}"},
+        "headers": {"Authorization": f"Bearer {os.getenv('SECTORS_API_KEY')}"},
     },
 })
 
@@ -44,15 +44,15 @@ ALLOWED_TOOLS = {
 
 _tools_cache = None
 
-def get_filtered_tools():
-    all_tools = sectors_client.get_tools()
-    filtered_tools = [tool for tool in all_tools if tool["name"] in ALLOWED_TOOLS]
+async def get_filtered_tools():
+    all_tools = await sectors_client.get_tools()
+    filtered_tools = [tool for tool in all_tools if tool.name in ALLOWED_TOOLS]
     return filtered_tools
 
-def get_tools_cache():
+async def get_tools_cache():
     global _tools_cache
     if _tools_cache is None:
-        _tools_cache = get_filtered_tools()
+        _tools_cache = await get_filtered_tools()
     return _tools_cache
 
 ## Redis
@@ -91,30 +91,19 @@ llm_rag = llm.with_structured_output(
 )
 
 # Tools
-## Tool: Fetch new knowledge 
-@tool
-async def fetch_new_knowledge(
-    query: str,
-    state: Annotated[dict, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId], 
-) -> Command | str:
-    """
-    F
-    """    
-    try:
-        # 
-        pass
-    except Exception as e:
-        traceback.print_exc()
-        return "Failed fetch new knowledge from database."
+llm_thinking_tools = None
+tool_node = None
 
 ## Define Tools node
-tools = [fetch_new_knowledge]
-tools += get_tools_cache()
+async def get_tools_list():
+    global llm_thinking_tools, tool_node
+    tools = await get_tools_cache()
 
-llm_thinking_tools = llm_thinking.bind_tools(tools)
+    llm_thinking_tools = llm_thinking.bind_tools(tools)
+    tool_node = ToolNode(tools)
+    return tools
 
-tool_node = ToolNode(tools)
+asyncio.run(get_tools_list())
     
 async def should_continue(state: State):
     print("Should continue?", flush=True)
@@ -177,6 +166,7 @@ async def basic(state: State):
     print("token system basic:", count_tokens([SystemMessage(content=system_query)]), flush=True)
 
     final_query = await trimming_message(final_query)
+    
     response = await llm_thinking_tools.ainvoke(final_query)
 
     print("Berhasil lewat basic", flush=True)
