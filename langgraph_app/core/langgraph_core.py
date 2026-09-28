@@ -13,7 +13,7 @@ from typing_extensions import Annotated
 import copy, traceback, json, base64, pickle, os, asyncio
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
-from core.states import State, LLMOutput, LLMRAG, SummaryState
+from core.states import MainState, ChatbotState, LLMOutput, LLMRAG, SummaryState
 from string_utils.prompts import Prompts
 from typing import Union, List
 from typing_extensions import Any
@@ -214,7 +214,7 @@ async def get_tools_list():
 
 asyncio.run(get_tools_list())
     
-async def should_continue(state: State):
+async def should_continue(state: ChatbotState):
     print("Should continue?", flush=True)
     messages = state["messages"]
     
@@ -231,7 +231,7 @@ async def should_continue(state: State):
     return "tools"
 
 # Main agents
-async def routing_where(state: State):
+async def routing_where(state: ChatbotState):
     route = state["routing"]
 
     if route == "chatbot":
@@ -241,7 +241,7 @@ async def routing_where(state: State):
 
 # ===== CHATBOT =====
 ## Agent: Basic 
-async def basic(state: State):
+async def basic(state: ChatbotState):
     print("Node: basic", flush=True)
     # Get data from state
     price_data = [await load_from_temp(key) for key in state["price_path"]]
@@ -267,7 +267,7 @@ async def basic(state: State):
     print("Berhasil lewat basic", flush=True)
     return {"messages": [response], "tool_loop": state.get("tool_loop", 0) + 1}
 
-async def basic_conclusion(state: State):
+async def basic_conclusion(state: ChatbotState):
     print("Node: basic_conclusion", flush=True)
 
     # Get data from state
@@ -396,7 +396,7 @@ async def summary_final(state: SummaryState):
         "summary": summary,
     }
 
-async def should_continue_summary(state: State):
+async def should_continue_summary(state: SummaryState):
     print("Should continue_summary?", flush=True)
     messages = state["messages"]
     
@@ -446,7 +446,7 @@ async def get_agent():
     summary = summary_builder.compile()
 
     # Chatbot
-    chatbot_builder = StateGraph(State)
+    chatbot_builder = StateGraph(ChatbotState)
     
     chatbot_builder.add_node("basic", basic)
     chatbot_builder.add_node("basic_conclusion", basic_conclusion)
@@ -460,7 +460,7 @@ async def get_agent():
     chatbot = chatbot_builder.compile()
 
     # Main
-    main_builder = StateGraph(State)
+    main_builder = StateGraph(MainState)
     main_builder.add_node("summary_agent", summary)
     main_builder.add_node("chatbot_agent", chatbot)
     
