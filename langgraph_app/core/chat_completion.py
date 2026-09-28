@@ -51,4 +51,37 @@ async def chat_workflow(db_pool, input_data: ChatInput):
             return {"thread_id": str(thread_id), "content": content} 
     except Exception as e:
         traceback.print_exc()
-        return {"status": "error", "content": ""}
+        return {"status": "error", "content": str(e)}
+
+async def summary(db_pool, input_data):
+    global pool
+    pool = db_pool
+    lang_core.pool = pool
+
+    builder = await get_agent()
+
+    thread_id = input_data.thread_id
+
+    config: RunnableConfig = {
+        "configurable": {
+            "thread_id": thread_id,
+        }
+    }
+
+    try:
+        async with AsyncPostgresSaver.from_conn_string(DB_URL) as checkpointer:
+            agent = builder.compile(checkpointer=checkpointer)
+
+            result_agent = await agent.invoke(
+                {
+                    "thread_id": str(thread_id),
+                },
+                config,
+            )
+
+            content = result_agent["summary"]
+
+            return {"thread_id": str(thread_id), "content": content}
+    except Exception as e:
+        traceback.print_exc()
+        return {"status": "error", "content": str(e)}
