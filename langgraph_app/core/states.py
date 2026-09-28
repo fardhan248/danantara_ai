@@ -45,6 +45,13 @@ def items_reducer(current: list, new: dict | list):
         
     return result    
 
+class MainState(TypedDict):
+    thread_id: str
+    routing: str
+    ticker: str
+
+    query: str
+
 class ChatbotState(TypedDict):
     thread_id: str 
     routing: str # chat, summary, report
