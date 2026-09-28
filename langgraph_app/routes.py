@@ -49,6 +49,12 @@ async def report(
 async def report_finance():
     pass
 
+# Prediksi
+@router.post("/predict")
+async def get_predict():
+    pass
+
+
 
 # Upload document (RAG)
 @router.post("/upload") #✅
