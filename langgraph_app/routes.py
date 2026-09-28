@@ -44,6 +44,11 @@ async def report(
 ):
     pool = request.app.state.pool
 
+# Finance report data
+@router.post("/report_finance")
+async def report_finance():
+    pass
+
 
 # Upload document (RAG)
 @router.post("/upload") #✅
