@@ -31,6 +31,12 @@ async def chat(
 
     return await chat_workflow(pool, input_data) #✅
 
+@router.post("/chat/resume")
+async def chat_resume(
+    request: Request,
+):
+    pool = request.app.state.pool
+
 
 # Upload document (RAG)
 @router.post("/upload") #✅
