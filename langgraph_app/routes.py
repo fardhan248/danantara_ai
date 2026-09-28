@@ -37,6 +37,13 @@ async def chat_resume(
 ):
     pool = request.app.state.pool
 
+# Report data
+@router.post("/report")
+async def report(
+    request: Request,
+):
+    pool = request.app.state.pool
+
 
 # Upload document (RAG)
 @router.post("/upload") #✅
