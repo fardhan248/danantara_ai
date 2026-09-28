@@ -45,20 +45,17 @@ def items_reducer(current: list, new: dict | list):
         
     return result    
 
-class State(TypedDict):
+class ChatbotState(TypedDict):
     thread_id: str 
-    # streaming_mode: bool = False
-    type: str # chat, summary, report
+    routing: str # chat, summary, report
+    ticker: str
 
     messages: Annotated[list[BaseMessage], add_messages] = [] # list of AnyMessage, Human, AI, Tool, System
-    selected_knowledge: Annotated[list[dict[str, Any]], items_reducer] = [] # list of dict: [{"knowledge_id": knowledge_id, "chunk_ids": [id_1, id_2]}]
-    chunk_knowledge: Annotated[list[dict[str, Any]], items_reducer] = [] # list of dict: [{"chunk_id": chunk_id, "content": content, "metadata": metadata}]
-    selected_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"table_id": str}]
-    tables: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"table": str, "metadata": dict}]
-    selected_image_in_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"img_path": str, "image_id": str}]
-    image_in_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"description": str, "metadata": dict}]
-    selected_image_out_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"img_path": str, "image_id": str}]
-    image_out_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"description": str, "metadata": dict}]
+    knowledge_path: Annotated[list[str], items_reducer] = [] # list of str: ["path_cache1", "path_cache2"]
+    table_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    image_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    finance_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    price_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
 
     query: str
     tool_loop: int = 0
