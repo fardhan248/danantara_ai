@@ -54,7 +54,10 @@ async def report_finance():
 async def get_predict():
     pass
 
-
+# Stock price data
+@router.post("/get_price")
+async def get_price():
+    pass
 
 # Upload document (RAG)
 @router.post("/upload") #✅
