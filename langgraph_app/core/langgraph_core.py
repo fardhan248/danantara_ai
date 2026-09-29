@@ -241,6 +241,18 @@ async def routing_where(state: ChatbotState):
         return "summary_agent"
 
 # ===== CHATBOT =====
+## Knowledge check
+async def knowledge_check(state: ChatbotState):
+
+    
+    return
+
+# RAG
+async def rag(state: ChatbotState):
+
+    
+    return
+
 ## Agent: Basic 
 async def basic(state: ChatbotState):
     print("Node: basic", flush=True)
@@ -448,12 +460,16 @@ async def get_agent():
 
     # Chatbot
     chatbot_builder = StateGraph(ChatbotState)
-    
+
+    chatbot_builder.add_node("knowledge_check", knowledge_check)
+    chatbot_builder.add_node("rag", rag)
     chatbot_builder.add_node("basic", basic)
     chatbot_builder.add_node("basic_conclusion", basic_conclusion)
     chatbot_builder.add_node("tools", tool_node) 
     
-    chatbot_builder.add_edge(START, "basic")
+    chatbot_builder.add_edge(START, "knowledge_check")
+    chatbot_builder.add_edge("knowledge_check", "rag")
+    chatbot_builder.add_edge("rag", "basic")
     chatbot_builder.add_conditional_edges("basic", should_continue, ["basic_conclusion", "tools"])
     chatbot_builder.add_edge("tools", "basic")
     chatbot_builder.add_edge("basic_conclusion", END)
