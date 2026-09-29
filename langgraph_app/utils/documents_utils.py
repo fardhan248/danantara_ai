@@ -22,13 +22,16 @@ async def get_vector_store_retriever(chroma_vector_store, search_filter: dict = 
     search_kwargs = {"k": k}
 
     if threshold is not None:
-        search_kwargs["threshold"] = threshold
+        search_kwargs["score_threshold"] = threshold
+        seacrh_type = "similarity_score_threshold"
+    else:
+        seacrh_type = "similarity"
     
     if search_filter:
         search_kwargs["filter"] = search_filter
     
     return chroma_vector_store.as_retriever(
-        search_type="similarity",
+        search_type=seacrh_type,
         search_kwargs=search_kwargs,
     )
      
