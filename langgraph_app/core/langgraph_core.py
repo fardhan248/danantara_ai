@@ -102,6 +102,22 @@ llm_output = llm.with_structured_output(
     schema=LLMOutput.model_json_schema(), method="json_schema"
 )
 
+# get documents by metadata
+def get_documents_by_metadata(chroma_vector_store, metadata_filter: dict):
+    collection = chroma_vector_store._collection
+
+    result = collection.get(
+        where=metadata_filter,
+        include=["documents", "metadatas"],
+    )
+
+    documents = [
+        Document(page_content=content, metadata=metadata)
+        for content, metadata in zip(result["documents"], result["metadatas"])
+    ]
+
+    return documents
+
 ## Tools
 ### Get price data from database
 @tool
