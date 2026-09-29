@@ -272,13 +272,13 @@ async def knowledge_check(state: ChatbotState):
     for i, knowledge in enumerate(loaded_knowledges):
         if knowledge is None:
             fetched = await get_documents_by_metadata(vector_store, {"chunk_id": knowledge_path[i]})
-            knowledges.expend(fetched)
+            knowledges.extend(fetched)
         else:
             knowledges.append(knowledge)
 
     knowledge_ids = [doc.metadata["chunk_id"] for doc in knowledges]
     
-    last_message = state["messages"][-1]
+    last_message = state["messages"][-1].content
 
     search_filter = {"chunk_id": {"$in": knowledge_ids}}
     retriever = await get_vector_store_retriever(vector_store, search_filter, k=3, threshold=0.6)
@@ -291,7 +291,7 @@ async def knowledge_check(state: ChatbotState):
 
     return {
         "knowledge_path": {
-            "replace": [key],
+            "replace": [keys],
         }
     }
 
