@@ -13,7 +13,8 @@ from typing_extensions import Annotated
 import copy, traceback, json, base64, pickle, os, asyncio
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
-from core.states import MainState, ChatbotState, LLMOutput, LLMRAG, SummaryState
+from core.states import MainState, ChatbotState, SummaryState
+from body_models.chat_models import LLMOutput, LLMRAG
 from string_utils.prompts import Prompts
 from typing import Union, List
 from typing_extensions import Any

@@ -2,8 +2,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 import copy
-from typing_extensions import TypedDict, Annotated, Any, Union, Literal
-from pydantic import BaseModel, Field
+from typing_extensions import TypedDict, Annotated, Any
 
 # State
 def items_reducer(current: list, new: dict | list):
@@ -75,10 +74,3 @@ class SummaryState(TypedDict):
     documents_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
     finance_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
     price_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
-
-class LLMOutput(BaseModel):
-    answer: str
-    sources: Union[list[str], Literal["N/A"]] = "N/A"
-
-class LLMRAG(BaseModel):
-    question: str
