@@ -1,4 +1,4 @@
-from langgraph_app.models.gemini import llm, llm_thinking
+from langgraph_app.models.gemini import llm, llm_thinking, embedding
 from transformers import AutoTokenizer
 
 from langgraph.graph import StateGraph, START, END
@@ -259,9 +259,41 @@ async def routing_where(state: ChatbotState):
 # ===== CHATBOT =====
 ## Knowledge check
 async def knowledge_check(state: ChatbotState):
+    knowledge_path = state.get("knowledge_path", [])
 
+    if len(knowledge_path) == 0:
+        return {}
+
+    loaded_knowledges = [load_from_temp(path) for path in knowledge_path]
+
+    vector_store = await get_vector_store_chroma("knowledges")
+
+    knowledges = []
+    for i, knowledge in enumerate(loaded_knowledges):
+        if knowledge is None:
+            fetched = await get_documents_by_metadata(vector_store, {"chunk_id": knowledge_path[i]})
+            knowledges.expend(fetched)
+        else:
+            knowledges.append(knowledge)
+
+    knowledge_ids = [doc.metadata["chunk_id"] for doc in knowledges]
     
-    return
+    last_message = state["messages"][-1]
+
+    search_filter = {"chunk_id": {"$in": knowledge_ids}}
+    retriever = await get_vector_store_retriever(vector_store, search_filter, k=3, threshold=0.6)
+    docs = await retriever.ainvoke(last_message)
+
+    keys = []
+    for doc in docs:
+        key = await save_to_temp(doc.metadata["chunk_id"], doc)
+        keys.append(key)
+
+    return {
+        "knowledge_path": {
+            "replace": [key],
+        }
+    }
 
 # RAG
 async def rag(state: ChatbotState):
