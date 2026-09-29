@@ -18,8 +18,11 @@ async def get_vector_store_chroma(collection: str):
         collection_metadata={"hnsw:space": "cosine"},
     )
     
-async def get_vector_store_retriever(chroma_vector_store, search_filter: dict = None, k: int = 5):
+async def get_vector_store_retriever(chroma_vector_store, search_filter: dict = None, k: int = 5, threshold: float = None):
     search_kwargs = {"k": k}
+
+    if threshold is not None:
+        search_kwargs["threshold"] = threshold
     
     if search_filter:
         search_kwargs["filter"] = search_filter
