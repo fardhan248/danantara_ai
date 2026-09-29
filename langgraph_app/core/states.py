@@ -31,16 +31,7 @@ def items_reducer(current: list, new: dict | list):
             result.append(item)
             
     # Replace element (especially for selected knowledge_id/s_knowledge_id)
-    for item in new.get("replace", []):
-        if isinstance(item, dict):
-            _id = list(item.keys())[0] # knowledge_id
-            for i, existing in enumerate(result):
-                if _id in existing:
-                    result[i] = item
-                    break
-        else:
-            for i, existing in enumerate(result):
-                result[i] = item
+    result = new.get("replace", result)
         
     return result    
 
