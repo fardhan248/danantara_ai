@@ -69,6 +69,7 @@ class ChatbotState(TypedDict):
     final_answer: dict[str, Any]
 
 class SummaryState(TypedDict):
+    thread_id: str
     ticker: str
 
     documents_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
