@@ -224,6 +224,21 @@ async def fetch_new_knowledge(
     """
     Fetches new knowledge for a given query from the document database.
     Returns a list of documents containing the new knowledge
+
+    ticker list:
+    BBRI: Bank Rakyat Indonesia
+    BMRI: Bank Mandiri
+    BBNI: Bank Negara Indonesia
+    BBTN: Bank Tabungan Negara
+    TLKM: Telkom Indonesia
+    SMGR: Semen Indonesia
+    JSMR: Jasa Marga
+    WIKA: Wijaya Karya
+    WSKT: Waskita Karya
+    PTPP: PP (Persero)
+    ADHI: Adhi Karya
+    KRAS: Krakatau Steel
+    GIAA: Garuda Indonesia
     """
     # ambil knowledge id
     knowledge_ids = state.get("knowledge_path", [])
