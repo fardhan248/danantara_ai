@@ -213,6 +213,71 @@ async def fetch_finance_data(
         }
     )
 
+# Tool: fetch_new_knowledge
+@tool
+async def fetch_new_knowledge(
+    query: str,
+    state: Annotated[dict, InjectedState],
+    ticker: str = None,
+    tool_call_id = Annotated[str, InjectedToolCallId]
+):
+    """
+    
+    """
+    # ambil knowledge id
+    knowledge_ids = state.get("knowledge_path", [])
+
+    # define vector store
+    vector_store = await get_vector_store_chroma("knowledges")
+
+    # define retriever with search filter that not in knowledge_ids
+    if ticker is None:
+        search_filter = {"chunk_id": {"$nin": knowledge_ids}}
+    else:
+        search_filter = {"$and": {"chunk_id": {"$nin": knowledge_ids}, "ticker": ticker}}
+    retriever = await get_vector_store_retriever(vector_store, search_filter)
+
+    # embedding retrieve
+    instruct = "Given a user query about the document knowledge, retrieve the relevant passages that answer the query"
+    retriever_query = f"Instruct: {instruct}\nQuery:{query}"
+    results = await retriever.ainvoke(retriever_query)
+
+    # BM25
+    bm25 = BM25Retriever()
+    await bm25.start(results)
+    results_bm25 = await bm25.retrieve(query)
+    results += [
+        Document(
+            page_content=item.get("page_content"),
+            metadata=item.get("metadata"),
+        )
+        for item in results_bm25
+    ]
+
+    if len(results) == 0:
+        return {}
+
+    # update state and save with redis
+    keys = []
+    for doc in results:
+        key = await save_to_temp(doc.metadata["chunk_id"], doc)
+        keys.append(key)
+    
+    return Command(
+        update={
+            "messages": [
+                ToolMessage(
+                    content="Success fetch knowledge from document database",
+                    tool_call_id=tool_call_id,
+                    name="fetch_new_knowledge",
+                )
+            ],
+            "knowledge_path": {
+                "append": keys,
+            }
+        }
+    )
+
 llm_thinking_tools = None
 llm_thinking_tools_summary = None
 tool_node = None
