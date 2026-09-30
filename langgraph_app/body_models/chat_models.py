@@ -8,6 +8,10 @@ class ChatInput(BaseModel):
     rerank: bool = False
     enhanced: bool = False
 
+class SummaryResumeInput(BaseModel):
+    thread_id: str
+    approved: bool
+
 class LLMOutput(BaseModel):
     answer: str
     sources: Union[list[str], Literal["N/A"]] = "N/A"
