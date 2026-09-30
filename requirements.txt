@@ -27,3 +27,6 @@ unstructured[all-docs]
 miniopy-async==1.23.5
 pdfplumber==0.11.10
 rank-bm25==0.2.2
+redis==4.3.4
+langchain-mcp-adapters==0.0.4
+mcp-server-calculator==0.2.1

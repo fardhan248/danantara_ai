@@ -2,8 +2,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 import copy
-from typing_extensions import TypedDict, Annotated, Any, Union, Literal
-from pydantic import BaseModel, Field
+from typing_extensions import TypedDict, Annotated, Any, Literal
 
 # State
 def items_reducer(current: list, new: dict | list):
@@ -32,43 +31,62 @@ def items_reducer(current: list, new: dict | list):
             result.append(item)
             
     # Replace element (especially for selected knowledge_id/s_knowledge_id)
-    for item in new.get("replace", []):
-        if isinstance(item, dict):
-            _id = list(item.keys())[0] # knowledge_id
-            for i, existing in enumerate(result):
-                if _id in existing:
-                    result[i] = item
-                    break
-        else:
-            for i, existing in enumerate(result):
-                result[i] = item
+    replace_items = new.get("replace", [])
+    if replace_items and not any(isinstance(i, dict) for i in replace_items):
+        result = list(replace_items)
+    else:
+        for item in replace_items:
+            if isinstance(item, dict):
+                _id = list(item.keys())[0]
+                for i, existing in enumerate(result):
+                    if _id in existing:
+                        result[i] = item
+                        break
         
     return result    
 
-class State(TypedDict):
+class MainState(TypedDict):
+    thread_id: str
+    routing: Literal["chatbot", "summary"]
+    ticker: str
+    sector: str
+
+    messages: Annotated[list[BaseMessage], add_messages] = []
+    query: str
+
+    start_date: str
+    end_date: str
+    final_answer: dict[str, Any]
+    summary: str
+
+class ChatbotState(TypedDict):
     thread_id: str 
-    # streaming_mode: bool = False
-    bm25: bool
-    rerank: bool
-    enhanced: bool
+    ticker: str
+    sector: str
 
     messages: Annotated[list[BaseMessage], add_messages] = [] # list of AnyMessage, Human, AI, Tool, System
-    selected_knowledge: Annotated[list[dict[str, Any]], items_reducer] = [] # list of dict: [{"knowledge_id": knowledge_id, "chunk_ids": [id_1, id_2]}]
-    chunk_knowledge: Annotated[list[dict[str, Any]], items_reducer] = [] # list of dict: [{"chunk_id": chunk_id, "content": content, "metadata": metadata}]
-    selected_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"table_id": str}]
-    tables: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"table": str, "metadata": dict}]
-    selected_image_in_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"img_path": str, "image_id": str}]
-    image_in_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"description": str, "metadata": dict}]
-    selected_image_out_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"img_path": str, "image_id": str}]
-    image_out_table: Annotated[list[dict[str, Any]], items_reducer] = [] # [{"description": str, "metadata": dict}]
+    knowledge_path: Annotated[list[str], items_reducer] = [] # list of str: ["path_cache1", "path_cache2"]
+    table_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    image_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    finance_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    price_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
 
     query: str
     tool_loop: int = 0
     final_answer: dict[str, Any]
 
-class LLMOutput(BaseModel):
-    answer: str
-    sources: Union[list[str], Literal["N/A"]] = "N/A"
+class SummaryState(TypedDict):
+    thread_id: str
+    ticker: str
+    start_date: str
+    end_date: str
+    sector: str
 
-class LLMRAG(BaseModel):
-    question: str
+    messages: Annotated[list[BaseMessage], add_messages] = []
+    documents_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    finance_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    price_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+
+    tool_loop: int = 0
+    summary: str
+    approved: bool

@@ -1,8 +1,8 @@
 from fastapi import Request, APIRouter, UploadFile
-from core.chat_completion import chat_workflow
+from core.chat_completion import chat_workflow, summary_workflow
 from core.langgraph_core import get_agent_graph
 from utils.documents_utils import put_new_knowledge, delete_knowledge, list_doc
-from body_models.chat_models import  ChatInput
+from body_models.chat_models import  ChatInput, SummaryResumeInput
 from utils.health_check import health_check
 import uuid
 
@@ -31,6 +31,49 @@ async def chat(
 
     return await chat_workflow(pool, input_data) #✅
 
+# Summary
+@router.post("/summary") #✅
+async def summary(
+    request: Request,
+    input_data: SummaryResumeInput, 
+):
+    pool = request.app.state.pool
+
+    if input_data.thread_id is None:
+        input_data.thread_id = str(uuid.uuid4())
+
+    return await summary_workflow(pool, input_data, resume=False) #✅
+
+# Continue summary
+@router.post("/summary/resume")
+async def summary_resume(
+    request: Request,
+    input_data: SummaryResumeInput,
+):
+    pool = request.app.state.pool
+    return await summary_workflow(pool, input_data, resume=True)
+
+# Report data
+@router.post("/report")
+async def report(
+    request: Request,
+):
+    pool = request.app.state.pool
+
+# Finance report data
+@router.post("/report_finance")
+async def report_finance():
+    pass
+
+# Prediksi
+@router.post("/predict")
+async def get_predict():
+    pass
+
+# Stock price data
+@router.post("/get_price")
+async def get_price():
+    pass
 
 # Upload document (RAG)
 @router.post("/upload") #✅

@@ -1,8 +1,24 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing_extensions import Union, Literal
     
 class ChatInput(BaseModel):
     input_prompt: str
+    sector: str
     thread_id: str | None = None
-    bm25: bool = False
-    rerank: bool = False
-    enhanced: bool = False
+    ticker: str | None = None
+
+class SummaryResumeInput(BaseModel):
+    thread_id: str
+    start_date: str
+    end_date: str
+    approved: bool
+    sector: str
+    ticker: str | None = None
+
+
+class LLMOutput(BaseModel):
+    answer: str
+    sources: Union[list[str], Literal["N/A"]] = "N/A"
+
+class LLMRAG(BaseModel):
+    question: str
