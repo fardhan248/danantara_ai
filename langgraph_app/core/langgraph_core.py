@@ -223,26 +223,19 @@ async def fetch_new_knowledge(
     query: str,
     state: Annotated[dict, InjectedState],
     tool_call_id: Annotated[str, InjectedToolCallId],
-    ticker: Optional[Literal["BBRI", "BMRI", "BBNI", "BBTN", "TLKM", "SMGR", "JSMR", "WIKA", "WSKT", "PTPP", "ADHI", "KRAS", "GIAA"]] = None,
+    sector: Optional[Literal["Bank", "Telecommunication", "Basic Materials", "Transportation Infrastructure", "Heavy Constructions & Civil Engineering", "Transportation"]] = None,
 ):
     """
     Fetches new knowledge for a given query from the document database.
     Returns a list of documents containing the new knowledge
 
-    ticker list:
-    BBRI: Bank Rakyat Indonesia
-    BMRI: Bank Mandiri
-    BBNI: Bank Negara Indonesia
-    BBTN: Bank Tabungan Negara
-    TLKM: Telkom Indonesia
-    SMGR: Semen Indonesia
-    JSMR: Jasa Marga
-    WIKA: Wijaya Karya
-    WSKT: Waskita Karya
-    PTPP: PP (Persero)
-    ADHI: Adhi Karya
-    KRAS: Krakatau Steel
-    GIAA: Garuda Indonesia
+    sectors list:
+    Bank: Bank Rakyat Indonesia (BBRI), Bank Mandiri (BMRI), Bank Negara Indonesia (BBNI), Bank Tabungan Negara (BBTN)
+    Telecommunication: Telkom Indonesia (TLKM)
+    Basic Materials: Semen Indonesia (SMGR), Krakatau Steel (KRAS)
+    Transportation Infrastructure: Jasa Marga (JSMR)
+    Heavy Constructions & Civil Engineering: Wijaya Karya (WIKA), Waskita Karya (WSKT), PP (Persero) (PTPP), Adhi Karya (ADHI)
+    Transportation: Garuda Indonesia (GIAA)
     """
     # ambil knowledge id
     knowledge_ids = state.get("knowledge_path", [])
@@ -251,10 +244,10 @@ async def fetch_new_knowledge(
     vector_store = await get_vector_store_chroma("knowledges")
 
     # define retriever with search filter that not in knowledge_ids
-    if ticker is None:
+    if sector is None:
         search_filter = {"chunk_id": {"$nin": knowledge_ids}}
     else:
-        search_filter = {"$and": [{"chunk_id": {"$nin": knowledge_ids}}, {"ticker": ticker}]}
+        search_filter = {"$and": [{"chunk_id": {"$nin": knowledge_ids}}, {"sector": sector}]}
     retriever = await get_vector_store_retriever(vector_store, search_filter)
 
     # embedding retrieve
@@ -448,7 +441,7 @@ async def rag(state: ChatbotState):
     vector_store = await get_vector_store_chroma("knowledges")
     
     # define retriever with search filter that not in knowledge_ids (jadi gak perlu handle duplikat)
-    search_filter = {"chunk_id": {"$nin": knowledge_ids}}
+    search_filter = {"$and": [{"chunk_id": {"$nin": knowledge_ids}}, {"sector": state["sector"]}]}
     retriever = await get_vector_store_retriever(vector_store, search_filter)
 
     # query rewriting
