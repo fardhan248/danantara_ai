@@ -1,6 +1,7 @@
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver  
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.types import Command
 
 import os, logging, traceback
 from core.langgraph_core import get_agent
@@ -53,13 +54,12 @@ async def chat_workflow(db_pool, input_data: ChatInput):
         traceback.print_exc()
         return {"status": "error", "content": str(e)}
 
-async def summary(db_pool, input_data):
+async def summary_workflow(db_pool, input_data, resume: bool = False):
     global pool
     pool = db_pool
     lang_core.pool = pool
 
     builder = await get_agent()
-
     thread_id = input_data.thread_id
 
     config: RunnableConfig = {
@@ -72,16 +72,32 @@ async def summary(db_pool, input_data):
         async with AsyncPostgresSaver.from_conn_string(DB_URL) as checkpointer:
             agent = builder.compile(checkpointer=checkpointer)
 
-            result_agent = await agent.invoke(
-                {
-                    "thread_id": str(thread_id),
-                },
-                config,
-            )
+            if resume:
+                await agent.ainvoke(
+                    Command(resume={"approved": input_data.approved}),
+                    config,
+                )
+            else:
+                await agent.ainvoke(
+                    {"thread_id": str(thread_id)},
+                    config,
+                )
 
-            content = result_agent["summary"]
+            state = await agent.aget_state(config)
+            if state.next:
+                interrupt_data = state.tasks[0].interrupt[0].value
+                return {
+                    "status": "waiting_for_approval",
+                    "thread_id": thread_id,
+                    "content": interrupt_data,
+                }
 
-            return {"thread_id": str(thread_id), "content": content}
+            return {
+                "status": "done",
+                "thread_id": thread_id,
+                "result": state.values,
+            }
+
     except Exception as e:
         traceback.print_exc()
         return {"status": "error", "content": str(e)}
