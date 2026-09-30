@@ -297,9 +297,64 @@ async def knowledge_check(state: ChatbotState):
 
 # RAG
 async def rag(state: ChatbotState):
+    # Ambil knowledge id
+    knowledge_ids = state.get("knowledge_path", [])
 
+    # define vector store
+    vector_store = await get_vector_store_chroma("knowledges")
     
-    return
+    # define retriever with search filter that not in knowledge_ids (jadi gak perlu handle duplikat)
+    search_filter = {"chunk_id": {"$nin": knowledge_ids}}
+    retriever = await get_vector_store_retriever(vector_store, search_filter)
+
+    # query rewriting
+    knowledges = [await load_from_temp(key) for key in knowledge_ids]
+    knowledges_text = "\n\n".join(
+        doc.page_content for doc in knowledges if doc is not None
+    )
+
+    system_query = prompts.RAG_SYSTEM_QUERY.format_map({
+        "knowledges": knowledges_text,
+    })
+
+    final_query = [
+        SystemMessage(content=system_query),
+        *state["messages"],
+        HumanMessage(content=f"User's query: {state['query']}"),
+    ]
+    final_query = await trimming_message(final_query)
+
+    new_query = await llm.ainvoke(final_query) # Gunakan json output
+    new_query = new_query["query"]
+
+    # embedding retrieve (5)
+    instruct = "Given a user query about the document knowledge, retrieve the relevant passages that answer the query"
+    retriever_query = f"Instruct: {instruct}\nQuery:{new_query}"
+    results = await retriever.ainvoke(retriever_query)
+
+    # BM25 (5)
+    bm25 = BM25Retriever()
+    await bm25.start(results)
+    results_bm25 = await bm25.retrieve(new_query)
+    results += [
+        Document(
+            page_content=item.get("page_content"),
+            metadata=item.get("metadata"),
+        )
+        for item in results_bm25
+    ]
+
+    # update state
+    keys = []
+    for doc in results:
+        key = await save_to_temp(doc.metadata["chunk_id"], doc)
+        keys.append(key)
+
+    return {
+        "knowledge_path": {
+            "append": keys,
+        }
+    }
 
 ## Agent: Basic 
 async def basic(state: ChatbotState):
