@@ -95,7 +95,7 @@ async def summary_workflow(db_pool, input_data, resume: bool = False):
             return {
                 "status": "done",
                 "thread_id": thread_id,
-                "result": state.values,
+                "summary": state.values.get("summary"),
             }
 
     except Exception as e:
