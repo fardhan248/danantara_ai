@@ -7,6 +7,8 @@ class ChatInput(BaseModel):
 
 class SummaryResumeInput(BaseModel):
     thread_id: str
+    start_date: str
+    end_date: str
     approved: bool
 
 class LLMOutput(BaseModel):

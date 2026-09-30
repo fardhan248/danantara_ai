@@ -61,6 +61,8 @@ async def summary_workflow(db_pool, input_data, resume: bool = False):
 
     builder = await get_agent()
     thread_id = input_data.thread_id
+    start_date = input_data.start_date
+    end_date = input_data.end_date
 
     config: RunnableConfig = {
         "configurable": {
@@ -79,7 +81,11 @@ async def summary_workflow(db_pool, input_data, resume: bool = False):
                 )
             else:
                 await agent.ainvoke(
-                    {"thread_id": str(thread_id)},
+                    {
+                        "thread_id": str(thread_id),
+                        "start_date": start_date,
+                        "end_date": end_date
+                    },
                     config,
                 )
 

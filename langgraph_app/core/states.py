@@ -72,7 +72,13 @@ class ChatbotState(TypedDict):
 class SummaryState(TypedDict):
     thread_id: str
     ticker: str
+    start_date: str
+    end_date: str
 
+    messages: Annotated[list[BaseMessage], add_messages] = []
     documents_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
     finance_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
     price_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+
+    tool_loop: int = 0
+    summary: str
