@@ -40,9 +40,7 @@ async def chat_workflow(db_pool, input_data: ChatInput):
                 {
                     "thread_id": str(thread_id),
                     "messages": [HumanMessage(content=input_prompt)],
-                    "bm25": bm25,
-                    "rerank": rerank,
-                    "enhanced": enhanced,
+                    "routing": "chatbot",
                 },
                 config,
             )
@@ -84,7 +82,8 @@ async def summary_workflow(db_pool, input_data, resume: bool = False):
                     {
                         "thread_id": str(thread_id),
                         "start_date": start_date,
-                        "end_date": end_date
+                        "end_date": end_date,
+                        "routing": "summary"
                     },
                     config,
                 )
