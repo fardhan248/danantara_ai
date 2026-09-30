@@ -99,7 +99,11 @@ async def trimming_message(messages):
     return messages 
 
 llm_output = llm.with_structured_output(
-    schema=LLMOutput.model_json_schema(), method="json_schema"
+    schema=LLMOutput.model_json_schema(), method="json_schema", include_raw=True,
+)
+
+llm_output_rag = llm.with_structured_output(
+    schema=LLMRAG.model_json_schema(), method="json_schema", include_raw=True,
 )
 
 # get documents by metadata
@@ -464,8 +468,8 @@ async def rag(state: ChatbotState):
     ]
     final_query = await trimming_message(final_query)
 
-    new_query = await llm.ainvoke(final_query) # Gunakan json output
-    new_query = new_query.get("query", "")
+    new_query = await llm_output_rag.ainvoke(final_query) # Gunakan json output
+    new_query = new_query["parsed"].get("query", "")
 
     if new_query in ["none", ""]:
         return {}
@@ -555,7 +559,7 @@ async def basic_conclusion(state: ChatbotState):
 
     final_query = await trimming_message(final_query)
 
-    response = await llm_output.ainvoke(final_query)
+    response = await llm_output.ainvoke(final_query)["parsed"]
 
     if not isinstance(response, dict):
         response = {"answer": response.content[0]["text"], "sources": []}
@@ -654,7 +658,7 @@ async def summary_final(state: SummaryState):
         HumanMessage(content=f"Price data: {price_data}\nFinance data: {finance_data}")
     ]
 
-    response = await llm.ainvoke(final_query)
+    response = await llm_output.ainvoke(final_query)
     summary = response.content[0]["text"] if isinstance(response.content, list) else response.content
 
     return {
