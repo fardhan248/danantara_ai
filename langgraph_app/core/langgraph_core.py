@@ -332,7 +332,7 @@ async def should_continue(state: ChatbotState):
         print("basic_conclusion", flush=True)
         return "basic_conclusion"
 
-    if state["tool_loop"] > 5:
+    if state["tool_loop"] > 20:
         print("basic_conclusion", flush=True)
         return "basic_conclusion"
         
@@ -672,7 +672,7 @@ async def should_continue_summary(state: SummaryState):
         print("human_review", flush=True)
         return "human_review"
 
-    if state["tool_loop"] > 5:
+    if state["tool_loop"] > 20:
         print("human_review", flush=True)
         return "human_review"
         
