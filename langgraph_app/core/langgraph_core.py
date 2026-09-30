@@ -325,7 +325,10 @@ async def rag(state: ChatbotState):
     final_query = await trimming_message(final_query)
 
     new_query = await llm.ainvoke(final_query) # Gunakan json output
-    new_query = new_query["query"]
+    new_query = new_query.get("query", "")
+
+    if new_query in ["none", ""]:
+        return {}
 
     # embedding retrieve (5)
     instruct = "Given a user query about the document knowledge, retrieve the relevant passages that answer the query"
@@ -343,6 +346,9 @@ async def rag(state: ChatbotState):
         )
         for item in results_bm25
     ]
+
+    if len(results) == 0:
+        return {}
 
     # update state
     keys = []
