@@ -3,6 +3,7 @@ from typing_extensions import Union, Literal
     
 class ChatInput(BaseModel):
     input_prompt: str
+    sector: str
     thread_id: str | None = None
     ticker: str | None = None
 
@@ -11,7 +12,9 @@ class SummaryResumeInput(BaseModel):
     start_date: str
     end_date: str
     approved: bool
+    sector: str
     ticker: str | None = None
+
 
 class LLMOutput(BaseModel):
     answer: str
