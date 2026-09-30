@@ -22,13 +22,11 @@ async def chat_workflow(db_pool, input_data: ChatInput):
     
     thread_id = input_data.thread_id
     input_prompt = input_data.input_prompt
-    bm25 = input_data.bm25
-    rerank = input_data.rerank
-    enhanced = input_data.enhanced
-    
+
     config: RunnableConfig = {
         "configurable": {
             "thread_id": thread_id,
+            "input_prompt": input_prompt,
         }
     }
     
@@ -40,7 +38,9 @@ async def chat_workflow(db_pool, input_data: ChatInput):
                 {
                     "thread_id": str(thread_id),
                     "messages": [HumanMessage(content=input_prompt)],
+                    "query": input_prompt,
                     "routing": "chatbot",
+                    "ticker": input_data.ticker,
                 },
                 config,
             )
@@ -83,7 +83,8 @@ async def summary_workflow(db_pool, input_data, resume: bool = False):
                         "thread_id": str(thread_id),
                         "start_date": start_date,
                         "end_date": end_date,
-                        "routing": "summary"
+                        "routing": "summary",
+                        "ticker": input_data.ticker,
                     },
                     config,
                 )

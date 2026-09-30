@@ -339,7 +339,7 @@ async def should_continue(state: ChatbotState):
     return "tools"
 
 # Main agents
-async def routing_where(state: ChatbotState):
+async def routing_where(state: MainState):
     route = state["routing"]
 
     if route == "chatbot":

@@ -2,7 +2,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 import copy
-from typing_extensions import TypedDict, Annotated, Any
+from typing_extensions import TypedDict, Annotated, Any, Literal
 
 # State
 def items_reducer(current: list, new: dict | list):
@@ -48,14 +48,17 @@ def items_reducer(current: list, new: dict | list):
 
 class MainState(TypedDict):
     thread_id: str
-    routing: str
+    routing: Literal["chatbot", "summary"]
     ticker: str
 
+    messages: Annotated[list[BaseMessage], add_messages] = []
     query: str
+
+    start_date: str
+    end_date: str
 
 class ChatbotState(TypedDict):
     thread_id: str 
-    routing: str # chat, summary, report
     ticker: str
 
     messages: Annotated[list[BaseMessage], add_messages] = [] # list of AnyMessage, Human, AI, Tool, System
