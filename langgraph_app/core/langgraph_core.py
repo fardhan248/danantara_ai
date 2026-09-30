@@ -459,10 +459,12 @@ async def basic(state: ChatbotState):
     # Get data from state
     price_data = [await load_from_temp(key) for key in state["price_path"]]
     finance_data = [await load_from_temp(key) for key in state["finance_path"]]
+    knowledges = [await load_from_temp(key) for key in state["knowledge_path"]]
 
     system_query = prompts.BASIC_SYSTEM_QUERY.format_map({
         "prices_data": price_data,
         "finance_data": finance_data,
+        "knowledges": knowledges,
     })   
 
     messages = state["messages"]
@@ -486,10 +488,12 @@ async def basic_conclusion(state: ChatbotState):
     # Get data from state
     price_data = [await load_from_temp(key) for key in state["price_path"]]
     finance_data = [await load_from_temp(key) for key in state["finance_path"]]
+    knowledges = [await load_from_temp(key) for key in state["knowledge_path"]]
 
     system_query = prompts.BASIC_SYSTEM_QUERY.format_map({
         "prices_data": price_data,
         "finance_data": finance_data,
+        "knowledges": knowledges,
     })   
 
     messages = state["messages"]
