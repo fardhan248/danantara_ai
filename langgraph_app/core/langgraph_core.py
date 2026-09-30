@@ -291,7 +291,7 @@ async def knowledge_check(state: ChatbotState):
 
     return {
         "knowledge_path": {
-            "replace": [keys],
+            "replace": keys,
         }
     }
 
