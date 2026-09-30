@@ -386,6 +386,55 @@ async def knowledge_check(state: ChatbotState):
         }
     }
 
+## Finance data check
+async def data_check(state: ChatbotState):
+    price_keys = state["price_path"]
+    finance_keys = state["finance_path"]
+
+    if len(price_keys) == 0 or len(finance_keys) == 0:
+        return {}
+
+    async def fetch_and_cache(key: str, table: str, columns: str):
+        cached = await load_from_temp(key)
+        if cached is not None:
+            return key  # udah pernah di-fetch, reuse path yang sama
+
+        parts = key.split("_")
+        ticker, start_date, end_date = parts[2], parts[3], parts[4]
+
+        query = f"""
+        SELECT {columns}
+        FROM {table}
+        WHERE ticker = $1 AND captured_at BETWEEN $2 AND $3"""
+
+        async with pool.acquire() as connection:
+            records = await connection.fetch(query, ticker, start_date, end_date)
+            data = [dict(r) for r in records]
+
+        new_key = f"{table}_{ticker}_{start_date}_{end_date}"
+        await save_to_temp(new_key, data)
+        return new_key
+
+    prices = [
+        await fetch_and_cache(
+            key, "price_snapshots", "ticker, price, volume, captured_at"
+        )
+        for key in price_keys
+    ]
+
+    finances = [
+        await fetch_and_cache(
+            key, "finance_snapshots",
+            "ticker, revenue, net_income, total_assets, total_liabilities, roe, roa, yoy, qoq"
+        )
+        for key in finance_keys
+    ]
+
+    return {
+        "price_path": {"replace": prices},
+        "finance_path": {"replace": finances},
+    }
+
 # RAG
 async def rag(state: ChatbotState):
     # Ambil knowledge id
@@ -666,12 +715,15 @@ async def get_agent():
     chatbot_builder = StateGraph(ChatbotState)
 
     chatbot_builder.add_node("knowledge_check", knowledge_check)
+    chatbot_builder.add_node("data_check", data_check)
     chatbot_builder.add_node("rag", rag)
     chatbot_builder.add_node("basic", basic)
     chatbot_builder.add_node("basic_conclusion", basic_conclusion)
     chatbot_builder.add_node("tools", tool_node) 
     
     chatbot_builder.add_edge(START, "knowledge_check")
+    chatbot_builder.add_edge(START, "data_check")
+    chatbot_builder.add_edge("data_check", "rag")
     chatbot_builder.add_edge("knowledge_check", "rag")
     chatbot_builder.add_edge("rag", "basic")
     chatbot_builder.add_conditional_edges("basic", should_continue, ["basic_conclusion", "tools"])
