@@ -299,7 +299,7 @@ async def get_tools_list():
     tools = await get_tools_cache()
     llm_thinking_tools_summary = llm_thinking.bind_tools(tools)
 
-    tools += [fetch_price_data, fetch_finance_data]
+    tools += [fetch_price_data, fetch_finance_data, fetch_new_knowledge]
 
     llm_thinking_tools = llm_thinking.bind_tools(tools)
     tool_node = ToolNode(tools)
