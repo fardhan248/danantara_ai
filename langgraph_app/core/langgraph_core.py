@@ -341,9 +341,6 @@ async def get_tools_list():
 
     llm_thinking_tools = llm_thinking.bind_tools(tools)
     tool_node = ToolNode(tools)
-    return tools
-
-asyncio.run(get_tools_list())
     
 async def should_continue(state: ChatbotState):
     print("Should continue?", flush=True)
@@ -719,6 +716,9 @@ async def should_repeat_summary(state: SummaryState):
 
 # Define agent
 async def get_agent():
+    if tool_node is None:
+        await get_tools_list()
+
     # Summary
     summary_builder = StateGraph(SummaryState)
 
