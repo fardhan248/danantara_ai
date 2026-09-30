@@ -9,7 +9,7 @@ from langgraph.prebuilt import InjectedState, ToolNode
 from langchain_core.tools import InjectedToolCallId, tool
 from langchain_core.documents import Document
 
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Literal, Optional
 import copy, traceback, json, base64, pickle, os, asyncio
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
@@ -218,11 +218,12 @@ async def fetch_finance_data(
 async def fetch_new_knowledge(
     query: str,
     state: Annotated[dict, InjectedState],
-    ticker: str = None,
-    tool_call_id = Annotated[str, InjectedToolCallId]
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    ticker: Optional[Literal["BBRI", "BMRI", "BBNI", "BBTN", "TLKM", "SMGR", "JSMR", "WIKA", "WSKT", "PTPP", "ADHI", "KRAS", "GIAA"]] = None,
 ):
     """
-    
+    Fetches new knowledge for a given query from the document database.
+    Returns a list of documents containing the new knowledge
     """
     # ambil knowledge id
     knowledge_ids = state.get("knowledge_path", [])
@@ -234,7 +235,7 @@ async def fetch_new_knowledge(
     if ticker is None:
         search_filter = {"chunk_id": {"$nin": knowledge_ids}}
     else:
-        search_filter = {"$and": {"chunk_id": {"$nin": knowledge_ids}, "ticker": ticker}}
+        search_filter = {"$and": [{"chunk_id": {"$nin": knowledge_ids}}, {"ticker": ticker}]}
     retriever = await get_vector_store_retriever(vector_store, search_filter)
 
     # embedding retrieve
@@ -255,7 +256,17 @@ async def fetch_new_knowledge(
     ]
 
     if len(results) == 0:
-        return {}
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="No new knowledge found",
+                        tool_call_id=tool_call_id,
+                        name="fetch_new_knowledge",
+                    )
+                ]
+            }
+        )
 
     # update state and save with redis
     keys = []
