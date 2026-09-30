@@ -633,7 +633,7 @@ async def human_review(state: SummaryState):
     return {"approved": decision["approved"]}
 
 async def should_repeat_summary(state: SummaryState):
-    if state.get("approved", False):
+    if state.get("approved", True):
         return END
     else:
         return "summary_agent"
