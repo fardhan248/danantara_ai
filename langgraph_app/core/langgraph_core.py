@@ -18,7 +18,7 @@ from body_models.chat_models import LLMOutput, LLMRAG
 from string_utils.prompts import Prompts
 from typing import Union, List
 from typing_extensions import Any
-from redis.asyncio import redis
+import redis.asyncio as redis
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -151,6 +151,19 @@ async def fetch_price_data(
         price_data = await connection.fetch(query, ticker, start_date, end_date)
         price_data = [dict(record) for record in price_data]
 
+        if not price_data: 
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="No price data found for the given ticker",
+                            tool_call_id=tool_call_id,
+                            name="fetch_price_data",
+                        )
+                    ],
+                }
+            )
+
         # Save to cache
         name = f"price_data_{ticker}_{start_date}_{end_date}"
         await save_to_temp(name, price_data)
@@ -197,6 +210,19 @@ async def fetch_finance_data(
     async with pool.acquire() as connection:
         finance_data = await connection.fetch(query, ticker, start_date, end_date)
         finance_data = [dict(record) for record in finance_data]
+
+        if not finance_data: 
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="No finance data found for the given ticker",
+                            tool_call_id=tool_call_id,
+                            name="fetch_finance_data",
+                        )
+                    ],
+                }
+            ) 
 
         # Save to cache
         name = f"finance_data_{ticker}_{start_date}_{end_date}"
@@ -352,7 +378,7 @@ async def knowledge_check(state: ChatbotState):
     if len(knowledge_path) == 0:
         return {}
 
-    loaded_knowledges = [load_from_temp(path) for path in knowledge_path]
+    loaded_knowledges = [await load_from_temp(path) for path in knowledge_path]
 
     vector_store = await get_vector_store_chroma("knowledges")
 
@@ -385,8 +411,8 @@ async def knowledge_check(state: ChatbotState):
 
 ## Finance data check
 async def data_check(state: ChatbotState):
-    price_keys = state["price_path"]
-    finance_keys = state["finance_path"]
+    price_keys = state.get("price_path", [])
+    finance_keys = state.get("finance_path", [])
 
     if len(price_keys) == 0 or len(finance_keys) == 0:
         return {}
@@ -503,9 +529,9 @@ async def rag(state: ChatbotState):
 async def basic(state: ChatbotState):
     print("Node: basic", flush=True)
     # Get data from state
-    price_data = [await load_from_temp(key) for key in state["price_path"]]
-    finance_data = [await load_from_temp(key) for key in state["finance_path"]]
-    knowledges = [await load_from_temp(key) for key in state["knowledge_path"]]
+    price_data = [await load_from_temp(key) for key in state.get("price_path", [])]
+    finance_data = [await load_from_temp(key) for key in state.get("finance_path", [])]
+    knowledges = [await load_from_temp(key) for key in state.get("knowledge_path", [])]
 
     system_query = prompts.BASIC_SYSTEM_QUERY.format_map({
         "prices_data": price_data,
@@ -532,9 +558,9 @@ async def basic_conclusion(state: ChatbotState):
     print("Node: basic_conclusion", flush=True)
 
     # Get data from state
-    price_data = [await load_from_temp(key) for key in state["price_path"]]
-    finance_data = [await load_from_temp(key) for key in state["finance_path"]]
-    knowledges = [await load_from_temp(key) for key in state["knowledge_path"]]
+    price_data = [await load_from_temp(key) for key in state.get("price_path", [])]
+    finance_data = [await load_from_temp(key) for key in state.get("finance_path", [])]
+    knowledges = [await load_from_temp(key) for key in state.get("knowledge_path", [])]
 
     system_query = prompts.BASIC_SYSTEM_QUERY.format_map({
         "prices_data": price_data,
@@ -552,7 +578,7 @@ async def basic_conclusion(state: ChatbotState):
 
     final_query = await trimming_message(final_query)
 
-    response = await llm_output.ainvoke(final_query)["parsed"]
+    response = (await llm_output.ainvoke(final_query))["parsed"]
 
     if not isinstance(response, dict):
         response = {"answer": response.content[0]["text"], "sources": []}
@@ -687,6 +713,9 @@ async def should_repeat_summary(state: SummaryState):
         return END
     else:
         return "summary_agent"
+
+# ===== Document Agent ===== (per kuartal and/or per year)
+## 
 
 # Define agent
 async def get_agent():

@@ -93,7 +93,7 @@ async def summary_workflow(db_pool, input_data, resume: bool = False):
 
             state = await agent.aget_state(config)
             if state.next:
-                interrupt_data = state.tasks[0].interrupt[0].value
+                interrupt_data = state.tasks[0].interrupts[0].value
                 return {
                     "status": "waiting_for_approval",
                     "thread_id": thread_id,

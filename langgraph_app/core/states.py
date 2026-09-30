@@ -31,18 +31,17 @@ def items_reducer(current: list, new: dict | list):
             result.append(item)
             
     # Replace element (especially for selected knowledge_id/s_knowledge_id)
-    for item in new.get("replace", []):
-        if isinstance(item, dict):
-            _id = list(item.keys())[0] # knowledge_id
-            for i, existing in enumerate(result):
-                if _id in existing:
-                    result[i] = item
-                    break
-        else:
-            result = [
-                existing for existing in result
-                if existing != item
-            ]
+    replace_items = new.get("replace", [])
+    if replace_items and not any(isinstance(i, dict) for i in replace_items):
+        result = list(replace_items)
+    else:
+        for item in replace_items:
+            if isinstance(item, dict):
+                _id = list(item.keys())[0]
+                for i, existing in enumerate(result):
+                    if _id in existing:
+                        result[i] = item
+                        break
         
     return result    
 
@@ -57,6 +56,8 @@ class MainState(TypedDict):
 
     start_date: str
     end_date: str
+    final_answer: dict[str, Any]
+    summary: str
 
 class ChatbotState(TypedDict):
     thread_id: str 
@@ -88,3 +89,4 @@ class SummaryState(TypedDict):
 
     tool_loop: int = 0
     summary: str
+    approved: bool
