@@ -50,6 +50,7 @@ class MainState(TypedDict):
     thread_id: str
     routing: Literal["chatbot", "summary"]
     ticker: str
+    sector: str
 
     messages: Annotated[list[BaseMessage], add_messages] = []
     query: str
@@ -60,6 +61,7 @@ class MainState(TypedDict):
 class ChatbotState(TypedDict):
     thread_id: str 
     ticker: str
+    sector: str
 
     messages: Annotated[list[BaseMessage], add_messages] = [] # list of AnyMessage, Human, AI, Tool, System
     knowledge_path: Annotated[list[str], items_reducer] = [] # list of str: ["path_cache1", "path_cache2"]
@@ -77,6 +79,7 @@ class SummaryState(TypedDict):
     ticker: str
     start_date: str
     end_date: str
+    sector: str
 
     messages: Annotated[list[BaseMessage], add_messages] = []
     documents_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]

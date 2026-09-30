@@ -41,6 +41,7 @@ async def chat_workflow(db_pool, input_data: ChatInput):
                     "query": input_prompt,
                     "routing": "chatbot",
                     "ticker": input_data.ticker,
+                    "sector": input_data.sector,
                 },
                 config,
             )
@@ -85,6 +86,7 @@ async def summary_workflow(db_pool, input_data, resume: bool = False):
                         "end_date": end_date,
                         "routing": "summary",
                         "ticker": input_data.ticker,
+                        "sector": input_data.sector,
                     },
                     config,
                 )
