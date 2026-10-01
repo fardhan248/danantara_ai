@@ -115,8 +115,8 @@ HIGHLY IMPORTANT NOTE:
 
         batch_messages = []
         for table in self._all_tables:
-            chunk_id = table.get("chunk_id", "")
-            tab = table["table"]
+            chunk_id = table.metadata.chunk_id
+            tab = getattr(table.metadata, "text_as_html", table.text)
             
             context = chunks.get(chunk_id, [])
 
@@ -134,11 +134,10 @@ HIGHLY IMPORTANT NOTE:
         responses = await self.client.abatch(batch_messages, config={"max_concurrency": 5})
 
         for i, table in enumerate(self._all_tables):
-            table["description"] = responses[i].content
+            table.metadata.description = responses[i].content
         
     async def start(self):
         # Extraction
         await self._create_elements()
         await self._chunk_elements()
         await self._create_table_description()
-        
