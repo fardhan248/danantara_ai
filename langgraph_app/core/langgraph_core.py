@@ -675,7 +675,7 @@ async def summary_final(state: SummaryState):
     ]
 
     response = await llm_output.ainvoke(final_query)
-    summary = response.content[0]["text"] if isinstance(response.content, list) else response.content
+    summary = response["parsed"] # {answer, sources}
 
     return {
         "messages": [response],
