@@ -31,3 +31,5 @@ redis==4.3.4
 langchain-mcp-adapters==0.3.2
 mcp-server-calculator==0.2.1
 langchain-google-genai==4.4.0
+av==17.1.0
+pillow>=10.0.0
