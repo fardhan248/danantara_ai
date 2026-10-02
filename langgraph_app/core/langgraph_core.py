@@ -485,7 +485,7 @@ async def rag(state: ChatbotState):
     final_query = await trimming_message(final_query)
 
     new_query = await llm_output_rag.ainvoke(final_query) # Gunakan json output
-    new_query = new_query["parsed"].get("query", "")
+    new_query = new_query["parsed"].get("question", "")
 
     if new_query in ["none", ""]:
         return {}
@@ -559,11 +559,11 @@ async def basic_conclusion(state: ChatbotState):
     finance_data = [await load_from_temp(key) for key in state.get("finance_path", [])]
     knowledges = [await load_from_temp(key) for key in state.get("knowledge_path", [])]
 
-    system_query = prompts.BASIC_SYSTEM_QUERY.format_map({
+    system_query = prompts.BASIC_CONCLUSION_SYSTEM_QUERY.format_map({
         "prices_data": price_data,
         "finance_data": finance_data,
         "knowledges": knowledges,
-    })   
+    })
 
     messages = state["messages"]
 
