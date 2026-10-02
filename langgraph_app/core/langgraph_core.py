@@ -10,11 +10,11 @@ from langchain_core.tools import InjectedToolCallId, tool
 from langchain_core.documents import Document
 
 from typing_extensions import Annotated, Literal, Optional
-import copy, traceback, json, base64, pickle, os, asyncio
+import copy, traceback, json, base64, pickle, os, asyncio, uuid
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
 from core.states import MainState, ChatbotState, SummaryState
-from body_models.chat_models import LLMOutput, LLMRAG
+from body_models.chat_models import LLMOutput, LLMRAG, MediaInput
 from string_utils.prompts import Prompts
 from typing import Union, List
 from typing_extensions import Any
@@ -83,6 +83,50 @@ async def load_from_temp(key: str):
     if data is not None:
         return pickle.loads(data)
     return None
+
+## Media input (gambar/video dari user)
+async def save_media_inputs(thread_id: str, media: list[MediaInput] | None, kind: Literal["image", "video"]) -> list[str]:
+    # Simpan media ke redis (bukan ke state) supaya base64 tidak ikut tersimpan di checkpoint postgres
+    keys = []
+    for item in media or []:
+        key = await save_to_temp(f"{kind}_{thread_id}_{uuid.uuid4().hex}", item.model_dump(exclude_none=True))
+        keys.append(key)
+    return keys
+
+async def build_query_message(state: ChatbotState) -> HumanMessage:
+    text = f"User's query: {state['query']}"
+
+    media_blocks = []
+    for kind in ("image", "video"):
+        for key in state.get(f"{kind}_path", []):
+            item = await load_from_temp(key)
+            if item is None: # expired di redis
+                continue
+            # Standard content block langchain, dikonversi ke Part Gemini oleh ChatGoogleGenerativeAI
+            media_blocks.append({"type": kind, **item})
+
+    if len(media_blocks) == 0:
+        return HumanMessage(content=text)
+
+    n_image = sum(block["type"] == "image" for block in media_blocks)
+    n_video = len(media_blocks) - n_image
+    text += f"\n\n(User melampirkan {n_image} gambar dan {n_video} video. Analisis lampiran tersebut sebagai bagian dari query user.)"
+
+    return HumanMessage(content=[{"type": "text", "text": text}, *media_blocks])
+
+async def build_final_query(system_query: str, state: ChatbotState) -> list[BaseMessage]:
+    # Trimming dilakukan pada query versi teks, media baru ditempel setelahnya
+    # supaya base64 tidak ikut dihitung token counter / ikut terpotong
+    final_query = [
+        SystemMessage(content=system_query),
+        *state["messages"],
+        HumanMessage(content=f"User's query: {state['query']}"),
+    ]
+    final_query = await trimming_message(final_query)
+    if len(final_query) > 0 and final_query[-1].type == "human":
+        final_query = final_query[:-1]
+
+    return [*final_query, await build_query_message(state)]
 
 ## Trimming messages
 async def trimming_message(messages):
@@ -477,12 +521,7 @@ async def rag(state: ChatbotState):
         "knowledges": knowledges_text,
     })
 
-    final_query = [
-        SystemMessage(content=system_query),
-        *state["messages"],
-        HumanMessage(content=f"User's query: {state['query']}"),
-    ]
-    final_query = await trimming_message(final_query)
+    final_query = await build_final_query(system_query, state)
 
     new_query = await llm_output_rag.ainvoke(final_query) # Gunakan json output
     new_query = new_query["parsed"].get("question", "")
@@ -536,15 +575,7 @@ async def basic(state: ChatbotState):
         "knowledges": knowledges,
     })   
 
-    messages = state["messages"]
-
-    final_query = [
-        SystemMessage(content=system_query),
-        *messages,
-        HumanMessage(content=f"User's query: {state['query']}"),
-    ]
-
-    final_query = await trimming_message(final_query)
+    final_query = await build_final_query(system_query, state)
     
     response = await llm_thinking_tools.ainvoke(final_query)
 
@@ -565,15 +596,7 @@ async def basic_conclusion(state: ChatbotState):
         "knowledges": knowledges,
     })   
 
-    messages = state["messages"]
-
-    final_query = [
-        SystemMessage(content=system_query),
-        *messages,
-        HumanMessage(content=f"User's query: {state['query']}"),
-    ]
-
-    final_query = await trimming_message(final_query)
+    final_query = await build_final_query(system_query, state)
 
     response = (await llm_output.ainvoke(final_query))["parsed"]
 

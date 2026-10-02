@@ -53,6 +53,8 @@ class MainState(TypedDict):
 
     messages: Annotated[list[BaseMessage], add_messages] = []
     query: str
+    image_path: list[str] = [] # gambar dari user di turn ini: ["path_cache1", "path_cache2"]
+    video_path: list[str] = [] # video dari user di turn ini: ["path_cache1", "path_cache2"]
 
     start_date: str
     end_date: str
@@ -67,7 +69,8 @@ class ChatbotState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages] = [] # list of AnyMessage, Human, AI, Tool, System
     knowledge_path: Annotated[list[str], items_reducer] = [] # list of str: ["path_cache1", "path_cache2"]
     table_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
-    image_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
+    image_path: list[str] = [] # gambar dari user di turn ini (overwrite tiap turn): ["path_cache1", "path_cache2"]
+    video_path: list[str] = [] # video dari user di turn ini (overwrite tiap turn): ["path_cache1", "path_cache2"]
     finance_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
     price_path: Annotated[list[str], items_reducer] = [] # ["path_cache1", "path_cache2"]
 

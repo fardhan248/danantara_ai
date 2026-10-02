@@ -31,6 +31,10 @@ async def chat_workflow(db_pool, input_data: ChatInput):
     }
     
     try:
+        # Gambar/video (opsional) disimpan di redis, state hanya menyimpan key-nya
+        image_path = await lang_core.save_media_inputs(thread_id, input_data.images, "image")
+        video_path = await lang_core.save_media_inputs(thread_id, input_data.videos, "video")
+
         async with AsyncPostgresSaver.from_conn_string(DB_URL) as checkpointer:
             agent = builder.compile(checkpointer=checkpointer)
 
@@ -42,6 +46,8 @@ async def chat_workflow(db_pool, input_data: ChatInput):
                     "routing": "chatbot",
                     "ticker": input_data.ticker,
                     "sector": input_data.sector,
+                    "image_path": image_path,
+                    "video_path": video_path,
                 },
                 config,
             )
