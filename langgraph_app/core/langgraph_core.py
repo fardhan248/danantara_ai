@@ -1,4 +1,6 @@
-from models.gemini import llm, llm_thinking, embedding
+# from models.gemini import llm, llm_thinking, embedding
+from models.llama_cpp import llm, llm_thinking, embedding
+from langchain_core.messages.utils import count_tokens_approximately
 from transformers import AutoTokenizer
 
 from langgraph.graph import StateGraph, START, END
@@ -133,7 +135,7 @@ async def trimming_message(messages):
     messages = trim_messages(
         messages,
         strategy="last",
-        token_counter=llm,
+        token_counter=count_tokens_approximately,
         max_tokens=10200,
         start_on="human",
         end_on=("human","tool"),
