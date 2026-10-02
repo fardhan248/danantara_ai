@@ -1,4 +1,4 @@
-from langgraph_app.models.gemini import llm, llm_thinking, embedding
+from models.gemini import llm, llm_thinking, embedding
 from transformers import AutoTokenizer
 
 from langgraph.graph import StateGraph, START, END
