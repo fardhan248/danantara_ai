@@ -88,73 +88,30 @@ async def chunk_document(filename, content_type, file_bytes):
             "created_at": str(datetime.now(ZoneInfo("Asia/Jakarta"))),
             "page_numbers": metadata.get("page_numbers", [1]),
             "is_continuation": metadata.get("is_continuation", False),
-            "image_out_table": metadata.get("image_out_table") or None,
-            "image_in_table": metadata.get("image_in_table") or None,
-            "table": metadata.get("table") or None,
             "type": "text",
         }
         for i, (chunk, metadata) in enumerate(zip(chunks, metadatas))
     ]
 
     if content_type == "application/pdf":
-        for table in extract.tables:
-            tab = table["table"]
+        for table in extract._all_tables:
+            tab = getattr(table.metadata, "text_as_html", table.text)
             metadata = {
                 "filename": filename,
                 "content_type": content_type,
                 "len_char": len(tab),
                 "knowledge_id": knowledge_id,
-                "chunk_id": table.get("chunk_id", ""),
-                "table_id": table["table_id"],
+                "chunk_id": table.metadata.chunk_id,
                 "created_at": str(datetime.now(ZoneInfo("Asia/Jakarta"))),
-                "page_numbers": table.get("page_numbers", [1]),
-                "image_ids": table.get("image_ids") or None,
+                "page_numbers": table.metadata.page_numbers,
+                "is_continuation": table.metadata.is_continuation,
                 "type": "table",
                 "table": tab,
             }
 
-            chunks.append(table["description"])
+            chunks.append(table.metadata.description)
             metadatas.append(metadata)
-            ids.append(table["table_id"])
-
-        for image in extract.images_out_table:
-            img_desc = image["description"]
-            metadata = {
-                "filename": filename,
-                "content_type": content_type,
-                "knowledge_id": knowledge_id,
-                "chunk_id": image.get("chunk_id", ""),
-                "image_id": image["image_id"],
-                "created_at": str(datetime.now(ZoneInfo("Asia/Jakarta"))),
-                "page_number": image.get("page_number", 1),
-                "img_path": image["img_path"],
-                "type": "image_out_tab",
-            }
-
-            chunks.append(img_desc)
-            metadatas.append(metadata)
-            ids.append(image["image_id"])
-
-        for image in extract.images_in_table:
-            img_desc = image["description"]
-            metadata = {
-                "filename": filename,
-                "content_type": content_type,
-                "knowledge_id": knowledge_id,
-                "chunk_id": image.get("chunk_id", ""),
-                "image_id": image["image_id"],
-                "created_at": str(datetime.now(ZoneInfo("Asia/Jakarta"))),
-                "page_number": image.get("page_number", 1),
-                "img_path": image["img_path"],
-                "table_id": image["table_id"],
-                "row": image["row"],
-                "column": image["column"],
-                "type": "image_in_tab",
-            }
-
-            chunks.append(img_desc)
-            metadatas.append(metadata)
-            ids.append(image["image_id"])
+            ids.append(table.metadata.chunk_id)
         
     return chunks, metadatas, ids
 
