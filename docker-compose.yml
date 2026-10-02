@@ -10,7 +10,7 @@ services:
             chromadb:
                 condition: service_started
         environment:
-            DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+            DATABASE_URL: ${DATABASE_URL} #postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
             GEMINI_API: ${GEMINI_API}
             SECTORS_API_KEY: ${SECTORS_API_KEY}
         volumes:
@@ -39,6 +39,87 @@ services:
             - redis_data:/data
         command: redis-server --appendonly yes
         restart: no
+
+    llama_cpp_llm:
+        image: ghcr.io/ggml-org/llama.cpp:server-cuda
+        container_name: llama_cpp_llm
+        ports:
+            - 8080:8080
+        volumes:
+            - ./models:/models
+        environment:
+            LLAMA_CPP_KEY: ${LLAMA_CPP_KEY}
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu]
+        command:
+            - --model
+            - /models/Qwen3.5-4B-Q8_0.gguf
+            - --mmproj
+            - /models/Qwen-3.5-4B-mmproj-BF16.gguf
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8080"
+            - --n-gpu-layers
+            - "all"
+            - --ctx-size
+            - "10240"
+            - --parallel
+            - "1"
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        restart: no
+    
+    # llama_cpp_embedding:
+    #     image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    #     container_name: llama_cpp_embedding
+    #     ports:
+    #         - 8081:8080
+    #     volumes:
+    #         - ./models:/models
+    #     environment:
+    #         LLAMA_CPP_KEY: ${LLAMA_CPP_KEY}
+    #     deploy:
+    #         resources:
+    #             reservations:
+    #                 devices:
+    #                     - driver: nvidia
+    #                       count: all
+    #                       capabilities: [gpu]
+    #     command:
+    #         - --model
+    #         - /models/Qwen.Qwen3-VL-Embedding-2B.Q5_K_M.gguf
+    #         # - --mmproj
+    #         # - /models/mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf
+    #         - --host
+    #         - 0.0.0.0
+    #         - --port
+    #         - "8080"
+    #         - --n-gpu-layers
+    #         - "all"
+    #         - --ctx-size
+    #         - "8192"
+    #         - --parallel
+    #         - "1"
+    #         - --embedding
+    #         - --pooling
+    #         - "last"
+    #     healthcheck:
+    #         test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+    #         interval: 10s
+    #         timeout: 5s
+    #         retries: 5
+    #         start_period: 30s
+    #     restart: no
 
 volumes:
     redis_data:
