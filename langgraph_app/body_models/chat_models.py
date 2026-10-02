@@ -5,7 +5,8 @@ class MediaInput(BaseModel):
     """
     Satu file gambar/video. Isi salah satu: `base64` atau `url`.
     - base64: isi file dalam base64 (boleh juga data URI, mis. "data:image/png;base64,...."), `mime_type` wajib
-    - url: URL publik (YouTube untuk video, atau http(s) biasa yang akan diunduh)
+    - url: URL publik http(s) yang langsung mengarah ke file (akan diunduh, link YouTube tidak didukung)
+    Video dikirim ke model sebagai beberapa frame gambar (llama.cpp tidak menerima input video langsung)
     """
     mime_type: str | None = Field(default=None, examples=["image/png", "video/mp4"])
     base64: str | None = None
