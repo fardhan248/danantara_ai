@@ -79,6 +79,10 @@ class ExtractPDF:
             chunk.metadata.page_numbers = page_numbers
 
         self.chunks = chunks
+        self.len_doc = max(
+            (p for chunk in chunks for p in chunk.metadata.page_numbers if p is not None),
+            default=1,
+        )
         self._all_tables = [self.chunks[i] for i in range(len(self.chunks)) if self.chunks[i].to_dict()["type"] in ["Table", "TableChunk"]]
         self._text_chunks = [self.chunks[i] for i in range(len(self.chunks)) if self.chunks[i].to_dict()["type"] == "CompositeElement"]
 

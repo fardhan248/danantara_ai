@@ -61,9 +61,10 @@ async def chunk_document(filename, content_type, file_bytes):
         extract = ExtractPDF(filebytes=BytesIO(file_bytes), filetype=content_type, client=llm, knowledge_id=knowledge_id)
         await extract.start()
 
-        chunks = [chunk.text for chunk in extract.chunks]
-        metadatas = [chunk.metadata.to_dict() for chunk in extract.chunks]
+        chunks = [chunk.text for chunk in extract._text_chunks]
+        metadatas = [chunk.metadata.to_dict() for chunk in extract._text_chunks]
         ids = [meta["chunk_id"] for meta in metadatas]
+        len_pages = extract.len_doc
         
     else: # txt
         extract = partition_text(
@@ -75,12 +76,13 @@ async def chunk_document(filename, content_type, file_bytes):
         chunks = [element.text for element in extract]
         metadatas = [element.metadata.to_dict() for element in extract]
         ids = [str(uuid.uuid4()) for _ in range(len(chunks))]
+        len_pages = 1
 
     metadatas = [
         {
             "filename": filename,
             "content_type": content_type,
-            "len_pages": extract.len_doc,
+            "len_pages": len_pages,
             "chunk_number": i + 1,
             "len_chunks": len(chunks),
             "len_char": len(chunk),
@@ -95,11 +97,14 @@ async def chunk_document(filename, content_type, file_bytes):
     ]
 
     if content_type == "application/pdf":
-        for table in extract._all_tables:
+        for i, table in enumerate(extract._all_tables):
             tab = getattr(table.metadata, "text_as_html", table.text)
             metadata = {
                 "filename": filename,
                 "content_type": content_type,
+                "len_pages": len_pages,
+                "table_number": i + 1,
+                "len_tables": len(extract._all_tables),
                 "len_char": len(tab),
                 "knowledge_id": knowledge_id,
                 "chunk_id": table.metadata.chunk_id,
