@@ -12,7 +12,7 @@ from langchain_core.tools import InjectedToolCallId, tool
 from langchain_core.documents import Document
 
 from typing_extensions import Annotated, Literal, Optional
-import copy, traceback, json, base64, pickle, os, asyncio, uuid
+import copy, traceback, json, base64, pickle, os, asyncio, uuid, io, av, httpx
 import utils.contextmanager_utils as cm
 from utils.documents_utils import get_vector_store_chroma, get_vector_store_retriever, BM25Retriever
 from core.states import MainState, ChatbotState, SummaryState
@@ -87,11 +87,95 @@ async def load_from_temp(key: str):
     return None
 
 ## Media input (gambar/video dari user)
+# llama.cpp (OpenAI compatible) hanya menerima gambar lewat content block "image_url",
+# jadi video dikirim sebagai beberapa frame yang diambil merata sepanjang durasi video
+MAX_VIDEO_FRAMES = int(os.getenv("MAX_VIDEO_FRAMES", 8))
+VIDEO_FRAME_MAX_SIDE = int(os.getenv("VIDEO_FRAME_MAX_SIDE", 768))
+
+async def read_media_bytes(item: MediaInput) -> tuple[bytes, str]:
+    if item.base64:
+        return base64.b64decode(item.base64), item.mime_type
+
+    # URL diunduh di sini, server llama.cpp belum tentu bisa akses internet
+    async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
+        response = await client.get(item.url)
+        response.raise_for_status()
+
+    mime_type = item.mime_type or response.headers.get("content-type", "").split(";")[0].strip()
+    return response.content, mime_type
+
+def to_image_url_block(data: bytes, mime_type: str) -> dict:
+    return {
+        "type": "image_url",
+        "image_url": {"url": f"data:{mime_type};base64,{base64.b64encode(data).decode('utf-8')}"},
+    }
+
+def extract_video_frames(data: bytes, max_frames: int = MAX_VIDEO_FRAMES) -> list[tuple[float, bytes]]:
+    # return: [(timestamp_detik, jpeg_bytes), ...]
+    sampled = []
+    with av.open(io.BytesIO(data)) as container:
+        stream = container.streams.video[0]
+        stream.thread_type = "AUTO"
+
+        duration = None
+        if stream.duration is not None and stream.time_base is not None:
+            duration = float(stream.duration * stream.time_base)
+        elif container.duration is not None:
+            duration = container.duration / av.time_base
+
+        # Durasi tidak diketahui -> ambil 1 frame per detik, nanti di-subsample
+        interval = duration / max_frames if duration else 1.0
+        next_time = 0.0 if not duration else interval / 2
+
+        for frame in container.decode(stream):
+            if frame.time is None or frame.time < next_time:
+                continue
+
+            image = frame.to_image()
+            image.thumbnail((VIDEO_FRAME_MAX_SIDE, VIDEO_FRAME_MAX_SIDE))
+            buffer = io.BytesIO()
+            image.convert("RGB").save(buffer, format="JPEG", quality=85)
+            sampled.append((frame.time, buffer.getvalue()))
+
+            next_time += interval
+            while next_time <= frame.time:
+                next_time += interval
+
+    if len(sampled) > max_frames:
+        step = len(sampled) / max_frames
+        sampled = [sampled[int(i * step)] for i in range(max_frames)]
+
+    return sampled
+
+async def media_to_content_blocks(item: MediaInput, kind: Literal["image", "video"]) -> list[dict]:
+    data, mime_type = await read_media_bytes(item)
+
+    if not mime_type.startswith(f"{kind}/"):
+        raise ValueError(
+            f"Media {kind} tidak valid (mime_type: '{mime_type or 'unknown'}'). "
+            f"URL harus link langsung ke file {kind} (link halaman seperti YouTube tidak didukung)"
+        )
+
+    if kind == "image":
+        return [to_image_url_block(data, mime_type)]
+
+    frames = await asyncio.to_thread(extract_video_frames, data)
+    if len(frames) == 0:
+        raise ValueError("Tidak ada frame yang bisa diambil dari video")
+
+    blocks = []
+    for timestamp, frame in frames:
+        blocks.append({"type": "text", "text": f"[detik {timestamp:.1f}]"})
+        blocks.append(to_image_url_block(frame, "image/jpeg"))
+    return blocks
+
 async def save_media_inputs(thread_id: str, media: list[MediaInput] | None, kind: Literal["image", "video"]) -> list[str]:
-    # Simpan media ke redis (bukan ke state) supaya base64 tidak ikut tersimpan di checkpoint postgres
+    # Simpan media ke redis (bukan ke state) supaya base64 tidak ikut tersimpan di checkpoint postgres.
+    # Yang disimpan sudah berupa content block OpenAI, jadi decode video cukup sekali per request
     keys = []
     for item in media or []:
-        key = await save_to_temp(f"{kind}_{thread_id}_{uuid.uuid4().hex}", item.model_dump(exclude_none=True))
+        blocks = await media_to_content_blocks(item, kind)
+        key = await save_to_temp(f"{kind}_{thread_id}_{uuid.uuid4().hex}", blocks)
         keys.append(key)
     return keys
 
@@ -99,20 +183,28 @@ async def build_query_message(state: ChatbotState) -> HumanMessage:
     text = f"User's query: {state['query']}"
 
     media_blocks = []
+    n_media = {"image": 0, "video": 0}
     for kind in ("image", "video"):
         for key in state.get(f"{kind}_path", []):
-            item = await load_from_temp(key)
-            if item is None: # expired di redis
+            blocks = await load_from_temp(key)
+            if blocks is None: # expired di redis
                 continue
-            # Standard content block langchain, dikonversi ke Part Gemini oleh ChatGoogleGenerativeAI
-            media_blocks.append({"type": kind, **item})
+
+            n_media[kind] += 1
+            if kind == "image":
+                media_blocks.append({"type": "text", "text": f"Gambar {n_media['image']}:"})
+            else:
+                n_frames = sum(block["type"] == "image_url" for block in blocks)
+                media_blocks.append({
+                    "type": "text",
+                    "text": f"Video {n_media['video']} ({n_frames} frame diambil merata dari video, urut berdasarkan waktu):",
+                })
+            media_blocks.extend(blocks)
 
     if len(media_blocks) == 0:
         return HumanMessage(content=text)
 
-    n_image = sum(block["type"] == "image" for block in media_blocks)
-    n_video = len(media_blocks) - n_image
-    text += f"\n\n(User melampirkan {n_image} gambar dan {n_video} video. Analisis lampiran tersebut sebagai bagian dari query user.)"
+    text += f"\n\n(User melampirkan {n_media['image']} gambar dan {n_media['video']} video. Analisis lampiran tersebut sebagai bagian dari query user.)"
 
     return HumanMessage(content=[{"type": "text", "text": text}, *media_blocks])
 
