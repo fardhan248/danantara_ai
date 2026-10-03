@@ -809,12 +809,12 @@ async def should_continue_summary(state: SummaryState):
     tool_calls = getattr(messages[-1], "tool_calls", [])
     
     if len(tool_calls) == 0:
-        print("human_review", flush=True)
-        return "human_review"
+        print("summary_final", flush=True)
+        return "summary_final"
 
     if state["tool_loop"] > 20:
-        print("human_review", flush=True)
-        return "human_review"
+        print("summary_final", flush=True)
+        return "summary_final"
         
     return "tools"
 
@@ -850,9 +850,10 @@ async def get_agent():
 
     summary_builder.add_edge(START, "fetch_data_api")
     summary_builder.add_edge("fetch_data_api", "summary_agent")
-    summary_builder.add_conditional_edges("summary_agent", should_continue_summary, ["human_review", "tools"])
+    summary_builder.add_conditional_edges("summary_agent", should_continue_summary, ["summary_final", "tools"])
     summary_builder.add_edge("tools", "summary_agent")
     summary_builder.add_edge("summary_agent", "summary_final")
+    summary_builder.add_edge("summary_final", "human_review")
     summary_builder.add_conditional_edges("human_review", should_repeat_summary, ["summary_agent", END])
 
     summary = summary_builder.compile()
