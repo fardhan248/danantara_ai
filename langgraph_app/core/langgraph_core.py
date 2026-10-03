@@ -37,12 +37,14 @@ mcp_clients = MultiServerMCPClient({
         "headers": {"Authorization": f"Bearer {os.getenv('SECTORS_API_KEY')}"},
     },
     "calculator": {
+        "transport": "stdio",
         "command": "python",
         "args": ["-m", "mcp_server_calculator"],
     },
     "datetime": {
+        "transport": "stdio",
         "command": "uvx",
-        "args": ["takanarishimbo-datetime-mcp-server"],
+        "args": ["--with", "mcp<2", "takanarishimbo-datetime-mcp-server"],
         "env": {
             "TIMEZONE": "Asia/Jakarta",
         }
