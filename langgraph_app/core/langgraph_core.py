@@ -602,7 +602,10 @@ async def rag(state: ChatbotState):
     vector_store = await get_vector_store_chroma("knowledges")
     
     # define retriever with search filter that not in knowledge_ids (jadi gak perlu handle duplikat)
-    search_filter = {"$and": [{"chunk_id": {"$nin": knowledge_ids}}, {"sector": state["sector"]}]}
+    if knowledge_ids:
+        search_filter = {"$and": [{"chunk_id": {"$nin": knowledge_ids}}, {"sector": state["sector"]}]}
+    else:
+        search_filter = {"sector": state["sector"]}
     retriever = await get_vector_store_retriever(vector_store, search_filter)
 
     # query rewriting
